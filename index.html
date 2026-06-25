@@ -871,6 +871,10 @@ window.doLogout=function(){
   }
   document.getElementById('app').style.display='none';
   document.getElementById('loginScreen').style.display='flex';
+  selRole('admin');
+  if(bmPollInterval){clearInterval(bmPollInterval);bmPollInterval=null;}
+};
+
 // Sayfa yüklenince table oturumu var mı kontrol et
 (function(){
   const sess=localStorage.getItem('bm_tableSession');
@@ -879,7 +883,6 @@ window.doLogout=function(){
       const obj=JSON.parse(sess);
       const age=(Date.now()-obj.ts)/1000/60;
       if(age<480){
-        // Table sekmesini seç ve küçük bildirim göster
         selRole('table');
         const err=document.getElementById('loginErr');
         if(err)err.innerHTML='<div style="color:var(--gold);font-size:0.75rem;">📍 Table '+obj.tableNo+' oturumu bulundu — giriş yapınca devam eder</div>';
@@ -887,9 +890,6 @@ window.doLogout=function(){
     }catch(e){}
   }
 })();
-  selRole('admin');
-  if(bmPollInterval){clearInterval(bmPollInterval);bmPollInterval=null;}
-};
 function refreshTopbar(){
   const s=getState();const el=document.getElementById('topbarRound');
   if(s.currentRound>0){
@@ -939,25 +939,27 @@ function renderTablePanel(){
   const s=getState();
   const c=document.getElementById('panelContent');
   if(s.status==='setup'){
-    c.innerHTML=`<div class="empty-state"><div class="empty-icon">⏳</div><div style="font-weight:600;margin-bottom:4px;">Tournament not started</div><div style="font-size:0.82rem;">Ask the director to start the tournament</div></div>`;
+    c.innerHTML=`<div class="empty-state"><div class="empty-icon">⏳</div><div style="font-weight:600;margin-bottom:4px;">Turnuva henüz başlamadı</div><div style="font-size:0.82rem;">Direktörden turnuvayı başlatmasını isteyin</div></div>`;
     return;
   }
   c.innerHTML=`
     <div class="bm-device">
       <div class="bm-lcd">
         <div class="bm-lcd-row">BRIDGEMATE  v3.0   </div>
-        <div class="bm-lcd-row inv">ROUND ${String(s.currentRound).padStart(2,'0')}    ${s.name.slice(0,12).toUpperCase()}</div>
-        <div class="bm-lcd-row">ENTER TABLE NUMBER </div>
-        <div class="bm-lcd-row blink">_________________  </div>
+        <div class="bm-lcd-row inv">TUR ${String(s.currentRound).padStart(2,'0')}    ${(s.name||'').slice(0,12).toUpperCase()}</div>
+        <div class="bm-lcd-row">MASA NUMARANIZI GIRIN</div>
+        <div class="bm-lcd-row blink">___________________</div>
       </div>
-      <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:14px;margin-top:8px;">
         <input type="number" id="tableInput" min="1" max="${s.tableCount}" inputmode="numeric"
-          style="font-family:'Share Tech Mono',monospace;font-size:2rem;text-align:center;padding:12px;width:140px;background:var(--lcdbg);border:2px solid var(--lcd);border-radius:6px;color:var(--lcd);outline:none;">
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-ghost" onclick="bmSetSide('ns');bmSelectTable()">🔵 NS Side</button>
-          <button class="btn btn-ghost" onclick="bmSetSide('ew');bmSelectTable()">🟡 EW Side</button>
+          placeholder="${s.tableCount}"
+          style="font-family:'Share Tech Mono',monospace;font-size:2.8rem;text-align:center;padding:14px;width:160px;background:var(--lcdbg);border:2px solid var(--lcd);border-radius:8px;color:var(--lcd);outline:none;">
+        <div style="font-size:0.75rem;color:var(--text3);">1 – ${s.tableCount} arası masa numarası</div>
+        <div style="display:flex;gap:10px;width:100%;max-width:280px;">
+          <button class="btn btn-ghost" style="flex:1;border-color:var(--blue);color:var(--blue);" onclick="bmSetSide('ns');bmSelectTable()">🔵 NS</button>
+          <button class="btn btn-ghost" style="flex:1;border-color:var(--gold);color:var(--gold);" onclick="bmSetSide('ew');bmSelectTable()">🟡 EW</button>
         </div>
-        <button class="btn btn-gold" style="min-width:180px;" onclick="bmSelectTable()">SELECT TABLE →</button>
+        <button class="btn btn-gold" style="min-width:220px;font-size:1.05rem;padding:12px;" onclick="bmSelectTable()">→ GİRİŞ</button>
       </div>
     </div>`;
   setTimeout(()=>document.getElementById('tableInput')?.focus(),80);
@@ -972,13 +974,71 @@ window.bmSetSide=function(side){
 window.bmSelectTable=function(){
   const s=getState();
   const n=parseInt(document.getElementById('tableInput')?.value||'');
-  if(isNaN(n)||n<1||n>s.tableCount){toast('❌ Geçerli tables numarası girin (1-'+s.tableCount+')');return;}
+  if(isNaN(n)||n<1||n>s.tableCount){toast('❌ Geçerli masa numarası girin (1-'+s.tableCount+')');return;}
   bmTableNo=n;
-  // Oturumu localStorage'a kaydet — sayfa yenilenince kaldığı yerden devam etsin
   localStorage.setItem('bm_tableSession',JSON.stringify({
     tableNo:n, side:bmSide, tid:_fbTourneyId, ts:Date.now()
   }));
-  renderTableDetail(n);
+  // Çiftin mevcut ismini kontrol et — yoksa opsiyonel isim ekranı göster
+  const movements=getMovements();
+  const pairs=getPairs();
+  const mk=s.currentRound+'_'+n;
+  const m=movements[mk]||{};
+  const pairKey=bmSide==='ns'?m.ns:m.ew;
+  const pair=pairs[pairKey]||{};
+  const hasName=pair.name&&pair.name.trim()&&!/^(Pair|Çift|NS-|EW-)/.test(pair.name);
+  if(!hasName){
+    bmShowNameEntry(n,pairKey);
+  } else {
+    renderTableDetail(n);
+  }
+};
+
+window.bmShowNameEntry=function(tableNo,pairKey){
+  const s=getState();
+  const c=document.getElementById('panelContent');
+  const sideLabel=bmSide==='ns'?'🔵 NS':'🟡 EW';
+  c.innerHTML=`
+    <div class="bm-device" style="max-width:360px;">
+      <div class="bm-lcd" style="margin-bottom:16px;">
+        <div class="bm-lcd-row inv">MASA ${String(tableNo).padStart(2,' ')} — ${bmSide.toUpperCase()} TARAFİ</div>
+        <div class="bm-lcd-row">İSİM GİRİŞİ (İSTEĞE BAĞLI)</div>
+        <div class="bm-lcd-row">BOŞSA OTOMATİK ATANIR  </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><span>✏️</span> ${sideLabel} Çift Adı</div>
+        <div style="font-size:0.8rem;color:var(--text2);margin-bottom:12px;">
+          İsim girmek <b>zorunda değilsiniz</b>. Boş bırakırsanız otomatik isim kullanılır.
+        </div>
+        <div class="field">
+          <input id="pairNameInput" placeholder="Örn: Ali & Ayşe"
+            style="font-size:1rem;"
+            onkeydown="if(event.key==='Enter')bmSaveNameAndGo(${tableNo},'${pairKey||''}')">
+        </div>
+        <div style="display:flex;gap:8px;margin-top:8px;">
+          <button class="btn btn-ghost" style="flex:1;" onclick="renderTableDetail(${tableNo})">
+            Atla →
+          </button>
+          <button class="btn btn-gold" style="flex:1;" onclick="bmSaveNameAndGo(${tableNo},'${pairKey||''}')">
+            ✅ Kaydet & Gir
+          </button>
+        </div>
+      </div>
+    </div>`;
+  setTimeout(()=>document.getElementById('pairNameInput')?.focus(),80);
+};
+
+window.bmSaveNameAndGo=function(tableNo,pairKey){
+  const name=(document.getElementById('pairNameInput')?.value||'').trim();
+  if(name&&pairKey){
+    const pairs=getPairs();
+    if(pairs[pairKey]){
+      pairs[pairKey].name=name;
+      setPairs(pairs);
+      toast('✅ İsim kaydedildi: '+name);
+    }
+  }
+  renderTableDetail(tableNo);
 };
 
 function renderTableDetail(tableNo){
