@@ -314,19 +314,22 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <button class="role-tab" id="rtab-screen" onclick="selRole('screen')">📺 Screen</button>
     </div>
 
-    <!-- QR ile bağlan — Table/Screen seçince görünür -->
+    <!-- Connect via QR — visible when Table/Screen selected -->
     <div id="qrJoinBox" style="display:none;margin:14px 0;padding:14px;background:var(--surface2);border-radius:10px;border:1px solid var(--border);text-align:center;">
-      <div style="font-size:0.82rem;font-weight:600;color:var(--gold);margin-bottom:6px;">📱 QR Kod ile Giriş</div>
-      <div style="font-size:0.75rem;color:var(--text2);margin-bottom:12px;">
-        Admin QR kodunu telefonunuzun kamera / QR uygulamasıyla okutun.<br>
-        Link açılınca masa numaranızı girin.
+      <div id="qrAutoStatus" style="display:none;background:var(--greendim);border:1px solid rgba(76,175,125,0.3);border-radius:8px;padding:8px 12px;margin-bottom:10px;">
+        <div style="font-size:0.82rem;font-weight:700;color:var(--green);">✅ Connected via QR link!</div>
+        <div id="qrAutoTid" style="font-size:0.72rem;color:var(--text2);margin-top:2px;"></div>
       </div>
-      <div id="qrScanResult" style="font-size:0.72rem;color:var(--text3);min-height:16px;margin-bottom:8px;"></div>
+      <div style="font-size:0.82rem;font-weight:600;color:var(--gold);margin-bottom:6px;">📱 Connect to Tournament</div>
+      <div style="font-size:0.75rem;color:var(--text2);margin-bottom:10px;">
+        Scan the QR code on the Admin screen with any QR reader app.<br>
+        <span style="color:var(--text3);font-size:0.7rem;">The link opens this page and connects automatically.</span>
+      </div>
       <div style="border-top:1px solid var(--border);padding-top:10px;">
-        <div style="font-size:0.72rem;color:var(--text3);margin-bottom:6px;">Veya Turnuva ID'yi elle girin:</div>
+        <div style="font-size:0.7rem;color:var(--text3);margin-bottom:6px;">Or enter Tournament ID manually:</div>
         <div style="display:flex;gap:6px;">
-          <input id="manualTid" placeholder="2026-06-25_1435" style="flex:1;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.82rem;outline:none;" onkeydown="if(event.key==='Enter')joinByTid()">
-          <button class="btn btn-blue btn-sm" onclick="joinByTid()">Bağlan</button>
+          <input id="manualTid" placeholder="2026-06-25_1435" style="flex:1;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.8rem;outline:none;">
+          <button class="btn btn-blue btn-sm" onclick="joinByTid()">Connect</button>
         </div>
       </div>
     </div>
@@ -335,10 +338,10 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <input type="password" id="pwInput" placeholder="Password" onkeydown="if(event.key==='Enter')doLogin()">
     </div>
     <div class="login-err" id="loginErr"></div>
-    <button class="btn-primary" onclick="doLogin()">Giris Yap</button>
+    <button class="btn-primary" onclick="doLogin()">Login</button>
     <div style="text-align:center;margin-top:14px;">
-      <span style="font-size:0.7rem;color:var(--text3);">BridgeMate v2.1 &nbsp;</span>
-      <span style="font-size:0.7rem;color:var(--gold);cursor:pointer;text-decoration:underline;" onclick="showFirebasePanel()">&#x26A1; Firebase Sync Ayarla</span>
+      <span style="font-size:0.7rem;color:var(--text3);">BridgeMate v3.0 &nbsp;</span>
+      <span style="font-size:0.7rem;color:var(--gold);cursor:pointer;text-decoration:underline;" onclick="showFirebasePanel()">&#x26A1; Firebase Sync Settings</span>
     </div>
   </div>
 </div>
@@ -438,7 +441,7 @@ function initFirebase(cfg){
       const dot=document.getElementById('fbStatusDot');
       const txt=document.getElementById('fbStatusTxt');
       if(dot){dot.style.background=connected?'var(--green)':'var(--red)';}
-      if(txt){txt.textContent=connected?'Canli':'Cevrimdisi';}
+      if(txt){txt.textContent=connected?'Online':'Offline';}
     });
     return true;
   }catch(e){
@@ -510,12 +513,12 @@ function buildOtherHTMLGlobal(boardNo_,tableNo_,round_){
   if(!boardNo_)return'';
   const s_=getState();
   const others=getOtherTablesSameBoard(boardNo_,tableNo_||bmTableNo,round_||s_.currentRound);
-  if(!others.length)return'<div style="font-size:0.75rem;color:var(--text3);margin-top:8px;text-align:center;">Diger masalar henuz oynamadi</div>';
+  if(!others.length)return'<div style="font-size:0.75rem;color:var(--text3);margin-top:8px;text-align:center;">Other tables have not played yet</div>';
   let h='<div style="margin-top:10px;"><div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Ayni board - Diger masalar</div>';
   others.forEach(function(o){
     const sc=o.nsScore>0?'var(--green)':o.nsScore<0?'var(--red)':'var(--gold)';
     h+='<div style="display:flex;justify-content:space-between;align-items:center;background:var(--surface2);border-radius:6px;padding:6px 10px;margin-bottom:4px;font-size:0.78rem;">'
-      +'<span style="color:var(--text3);">Masa '+o.table+'</span>'
+      +'<span style="color:var(--text3);">Table '+o.table+'</span>'
       +'<span style="font-family:\'Share Tech Mono\',monospace;">'+o.contract+'</span>'
       +'<span style="font-weight:700;color:'+sc+';">'+(o.nsScore>0?'+':'')+o.nsScore+'</span>'
       +'</div>';
@@ -729,7 +732,35 @@ function getNextRoundInfo(tableNo,currentRound,state,movements,pairs){
 // ══════════════════════════════════════════════════════
 //  AUTH
 // ══════════════════════════════════════════════════════
-const PASS={admin:'2370',table:'1234'};
+// Passwords — stored in localStorage if changed
+function getPasswords(){
+  try{
+    const p=JSON.parse(localStorage.getItem('bm_passwords')||'null');
+    return p||{admin:'2370',table:'1234'};
+  }catch{return{admin:'2370',table:'1234'};}
+}
+function savePasswords(p){localStorage.setItem('bm_passwords',JSON.stringify(p));}
+const PASS=new Proxy({},{get(_,k){return getPasswords()[k];}});
+
+window.showChangePassword=function(){
+  openModal('🔐 Change Passwords',`
+    <div class="field"><label>New Admin Password</label><input type="password" id="newAdminPw" placeholder="Leave blank to keep current"></div>
+    <div class="field"><label>New Table Password</label><input type="password" id="newTablePw" placeholder="Leave blank to keep current"></div>
+    <div style="font-size:0.72rem;color:var(--text3);margin-top:4px;">Current admin: ••••  Current table: ••••</div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+     <button class="btn btn-gold" onclick="applyPasswords()">Save Passwords</button>`);
+};
+window.applyPasswords=function(){
+  const p=getPasswords();
+  const a=document.getElementById('newAdminPw').value.trim();
+  const t=document.getElementById('newTablePw').value.trim();
+  if(a)p.admin=a;
+  if(t)p.table=t;
+  if(!a&&!t){toast('No changes made');return;}
+  savePasswords(p);
+  toast('✅ Passwords updated');
+  closeModal();
+};
 let role='admin';
 
 window.selRole=function(r){
@@ -748,8 +779,8 @@ selRole('admin');
 window.doLogin=function(){
   const err=document.getElementById('loginErr');err.textContent='';
   const pw=document.getElementById('pwInput').value;
-  if(role==='admin'&&pw!==PASS.admin){err.textContent='❌ Yanlis sifre';return;}
-  if(role==='table'&&pw!==PASS.table){err.textContent='❌ Yanlis sifre';return;}
+  if(role==='admin'&&pw!==PASS.admin){err.textContent='❌ Wrong password';return;}
+  if(role==='table'&&pw!==PASS.table){err.textContent='❌ Wrong password';return;}
   if(role==='admin'){
     const snap=localStorage.getItem('bm_adminSessionSnap');
     const st=DB.get('state');
@@ -763,11 +794,11 @@ window.doLogin=function(){
         <div style="max-width:420px;margin:40px auto;padding:0 14px;">
           <div class="card" style="text-align:center;border-color:var(--gold);">
             <div style="font-size:2rem;margin-bottom:10px;">⚠️</div>
-            <div style="font-size:1rem;font-weight:700;color:var(--gold);margin-bottom:6px;">Kaydedilmis turnuva bulundu</div>
+            <div style="font-size:1rem;font-weight:700;color:var(--gold);margin-bottom:6px;">Saved tournament found</div>
             <div style="font-size:0.82rem;color:var(--text2);margin-bottom:18px;">${st.name}</div>
             <div style="display:flex;gap:8px;">
-              <button class="btn btn-green btn-full" onclick="sessionContinue()">&#x25b6; Devam Et</button>
-              <button class="btn btn-red btn-full" onclick="sessionNew()">&#x2795; Yeni Turnuva</button>
+              <button class="btn btn-green btn-full" onclick="sessionContinue()">&#x25b6; Continue</button>
+              <button class="btn btn-red btn-full" onclick="sessionNew()">&#x2795; New Tournament</button>
             </div>
           </div>
         </div>`;
@@ -804,7 +835,7 @@ window.doLogin=function(){
           setTimeout(()=>{
             const s=getState();
             if(s&&s.status==='running'){
-              toast('📍 Masa '+obj.tableNo+' oturumu devam ediyor...');
+              toast('📍 Table '+obj.tableNo+' oturumu devam ediyor...');
               renderTableDetail(obj.tableNo);
             } else {
               renderPanel();
@@ -851,7 +882,7 @@ window.doLogout=function(){
         // Table sekmesini seç ve küçük bildirim göster
         selRole('table');
         const err=document.getElementById('loginErr');
-        if(err)err.innerHTML='<div style="color:var(--gold);font-size:0.75rem;">📍 Masa '+obj.tableNo+' oturumu bulundu — giriş yapınca devam eder</div>';
+        if(err)err.innerHTML='<div style="color:var(--gold);font-size:0.75rem;">📍 Table '+obj.tableNo+' oturumu bulundu — giriş yapınca devam eder</div>';
       }
     }catch(e){}
   }
@@ -863,7 +894,7 @@ function refreshTopbar(){
   const s=getState();const el=document.getElementById('topbarRound');
   if(s.currentRound>0){
     el.style.display='inline-flex';
-    el.textContent='Tur '+s.currentRound+'/'+s.roundCount+(s.name?' · '+s.name:'');
+    el.textContent='Round '+s.currentRound+'/'+s.roundCount+(s.name?' · '+s.name:'');
   } else el.style.display='none';
 }
 
@@ -901,7 +932,6 @@ let bmSide='ns'; // 'ns' or 'ew' — which side is this device
 let boardForm={level:null,suit:null,declarer:null,result:0,doubled:'',leadSuit:'',leadRank:'',isPass:false};
 let bmPollInterval=null;
 let bmTableState='select'; // 'select'|'confirm'|'play'|'approve'|'round_over'|'waiting'|'new_players'
-let _qrJoinMode=false; // QR ile gelindi mi?
 
 function renderTablePanel(){
   bmTableNo=null;bmTableState='select';
@@ -909,27 +939,25 @@ function renderTablePanel(){
   const s=getState();
   const c=document.getElementById('panelContent');
   if(s.status==='setup'){
-    c.innerHTML=`<div class="empty-state"><div class="empty-icon">⏳</div><div style="font-weight:600;margin-bottom:4px;">Turnuva henüz başlamadı</div><div style="font-size:0.82rem;">Direktörden turnuvayı başlatmasını isteyin</div></div>`;
+    c.innerHTML=`<div class="empty-state"><div class="empty-icon">⏳</div><div style="font-weight:600;margin-bottom:4px;">Tournament not started</div><div style="font-size:0.82rem;">Ask the director to start the tournament</div></div>`;
     return;
   }
   c.innerHTML=`
     <div class="bm-device">
       <div class="bm-lcd">
-        <div class="bm-lcd-row">BRIDGEMATE  v4.0   </div>
-        <div class="bm-lcd-row inv">TUR ${String(s.currentRound).padStart(2,'0')}    ${(s.name||'').slice(0,12).toUpperCase()}</div>
-        <div class="bm-lcd-row">MASA NUMARANIZI GIRIN</div>
+        <div class="bm-lcd-row">BRIDGEMATE  v3.0   </div>
+        <div class="bm-lcd-row inv">ROUND ${String(s.currentRound).padStart(2,'0')}    ${s.name.slice(0,12).toUpperCase()}</div>
+        <div class="bm-lcd-row">ENTER TABLE NUMBER </div>
         <div class="bm-lcd-row blink">_________________  </div>
       </div>
-      <div style="display:flex;flex-direction:column;align-items:center;gap:14px;margin-top:6px;">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
         <input type="number" id="tableInput" min="1" max="${s.tableCount}" inputmode="numeric"
-          placeholder="Masa No"
-          style="font-family:'Share Tech Mono',monospace;font-size:2.4rem;text-align:center;padding:14px;width:160px;background:var(--lcdbg);border:2px solid var(--lcd);border-radius:8px;color:var(--lcd);outline:none;">
-        <div style="font-size:0.75rem;color:var(--text3);">1 – ${s.tableCount} arası</div>
-        <div style="display:flex;gap:8px;width:100%;max-width:260px;">
-          <button class="btn btn-blue" style="flex:1;" onclick="bmSetSide('ns');bmSelectTable()">🔵 NS</button>
-          <button class="btn btn-gold" style="flex:1;" onclick="bmSetSide('ew');bmSelectTable()">🟡 EW</button>
+          style="font-family:'Share Tech Mono',monospace;font-size:2rem;text-align:center;padding:12px;width:140px;background:var(--lcdbg);border:2px solid var(--lcd);border-radius:6px;color:var(--lcd);outline:none;">
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-ghost" onclick="bmSetSide('ns');bmSelectTable()">🔵 NS Side</button>
+          <button class="btn btn-ghost" onclick="bmSetSide('ew');bmSelectTable()">🟡 EW Side</button>
         </div>
-        <button class="btn btn-green btn-full" style="max-width:260px;" onclick="bmSelectTable()">→ GİRİŞ</button>
+        <button class="btn btn-gold" style="min-width:180px;" onclick="bmSelectTable()">SELECT TABLE →</button>
       </div>
     </div>`;
   setTimeout(()=>document.getElementById('tableInput')?.focus(),80);
@@ -946,77 +974,11 @@ window.bmSelectTable=function(){
   const n=parseInt(document.getElementById('tableInput')?.value||'');
   if(isNaN(n)||n<1||n>s.tableCount){toast('❌ Geçerli masa numarası girin (1-'+s.tableCount+')');return;}
   bmTableNo=n;
+  // Oturumu localStorage'a kaydet — sayfa yenilenince kaldığı yerden devam etsin
   localStorage.setItem('bm_tableSession',JSON.stringify({
     tableNo:n, side:bmSide, tid:_fbTourneyId, ts:Date.now()
   }));
-  // Çiftin mevcut ismini kontrol et
-  const movements=getMovements();
-  const pairs=getPairs();
-  const mk=s.currentRound+'_'+n;
-  const m=movements[mk]||{};
-  const pairKey=bmSide==='ns'?m.ns:m.ew;
-  const pair=pairs[pairKey]||{};
-  const hasName=pair.name&&pair.name.trim()&&!pair.name.startsWith('Çift ');
-  // İsim yoksa opsiyonel isim girme ekranı göster
-  if(!hasName){
-    bmShowNameEntry(n,pairKey,pair.name||'');
-  } else {
-    renderTableDetail(n);
-  }
-};
-
-window.bmShowNameEntry=function(tableNo,pairKey,currentName){
-  const s=getState();
-  const movements=getMovements();
-  const mk=s.currentRound+'_'+tableNo;
-  const m=movements[mk]||{};
-  const pairs=getPairs();
-  const nsPair=pairs[m.ns]||{name:'—'};
-  const ewPair=pairs[m.ew]||{name:'—'};
-  const c=document.getElementById('panelContent');
-  c.innerHTML=`
-    <div class="bm-device" style="max-width:360px;">
-      <div class="bm-lcd" style="margin-bottom:16px;">
-        <div class="bm-lcd-row inv">MASA ${String(tableNo).padStart(2,' ')} — İSİM GİRİŞİ</div>
-        <div class="bm-lcd-row">NS: ${nsPair.name.slice(0,16).padEnd(16)}</div>
-        <div class="bm-lcd-row">EW: ${ewPair.name.slice(0,16).padEnd(16)}</div>
-      </div>
-      <div class="card">
-        <div class="card-title"><span>✏️</span> Çift Adı (İsteğe Bağlı)</div>
-        <div style="font-size:0.8rem;color:var(--text2);margin-bottom:12px;">
-          İsim girmek zorunda değilsiniz. Boş bırakırsanız otomatik isim atanır.
-        </div>
-        <div class="field">
-          <label>${bmSide==='ns'?'🔵 NS Çifti Adı':'🟡 EW Çifti Adı'}</label>
-          <input id="pairNameInput" value="${currentName||''}" placeholder="Örn: Ali & Ayşe" 
-            style="font-size:1rem;"
-            onkeydown="if(event.key==='Enter')bmSaveNameAndGo(${tableNo},'${pairKey||''}')">
-        </div>
-        <div style="display:flex;gap:8px;margin-top:4px;">
-          <button class="btn btn-ghost" style="flex:1;" onclick="renderTableDetail(${tableNo})">
-            Atla →
-          </button>
-          <button class="btn btn-gold" style="flex:1;" onclick="bmSaveNameAndGo(${tableNo},'${pairKey||''}')">
-            ✅ Kaydet & Gir
-          </button>
-        </div>
-      </div>
-    </div>`;
-  setTimeout(()=>document.getElementById('pairNameInput')?.focus(),80);
-};
-
-window.bmSaveNameAndGo=function(tableNo,pairKey){
-  const nameInput=document.getElementById('pairNameInput');
-  const name=(nameInput?.value||'').trim();
-  if(name&&pairKey){
-    const pairs=getPairs();
-    if(pairs[pairKey]){
-      pairs[pairKey].name=name;
-      setPairs(pairs);
-      toast('✅ İsim kaydedildi: '+name);
-    }
-  }
-  renderTableDetail(tableNo);
+  renderTableDetail(n);
 };
 
 function renderTableDetail(tableNo){
@@ -1529,12 +1491,12 @@ function renderApprovalWaiting(boardNo,boardData,key){
 
   function buildOtherHTML(){
     const others=getOtherTablesSameBoard(boardNo,bmTableNo,s.currentRound);
-    if(!others.length)return '<div style="font-size:0.75rem;color:var(--text3);margin-top:8px;text-align:center;">Diger masalar henuz oynamadi</div>';
+    if(!others.length)return '<div style="font-size:0.75rem;color:var(--text3);margin-top:8px;text-align:center;">Other tables have not played yet</div>';
     let h='<div style="margin-top:10px;"><div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Ayni board — Diger masalar</div>';
     others.forEach(function(o){
       const sc=o.nsScore>0?'var(--green)':o.nsScore<0?'var(--red)':'var(--gold)';
       h+='<div style="display:flex;justify-content:space-between;align-items:center;background:var(--surface2);border-radius:6px;padding:6px 10px;margin-bottom:4px;font-size:0.78rem;">'
-        +'<span style="color:var(--text3);">Masa '+o.table+'</span>'
+        +'<span style="color:var(--text3);">Table '+o.table+'</span>'
         +'<span style="font-family:\'Share Tech Mono\',monospace;">'+o.contract+'</span>'
         +'<span style="font-weight:700;color:'+sc+';">'+(o.nsScore>0?'+':'')+o.nsScore+'</span>'
         +'</div>';
@@ -1624,7 +1586,7 @@ function renderScreenPanel(){
       <div class="sb-header">
         <div class="sb-title">🏆 ${s.name}</div>
         <div style="display:flex;gap:6px;align-items:center;">
-          <span class="live-pill"><div class="live-dot"></div>Canli</span>
+          <span class="live-pill"><div class="live-dot"></div>Online</span>
           <button class="btn btn-blue btn-sm" onclick="screenPrintPDF()">🖨 PDF Çikti</button>
         </div>
       </div>
@@ -1660,8 +1622,8 @@ window.screenPrintPDF=function(){
     const sc=typeof d.nsScore==='number'?((d.nsScore>0?'+':'')+d.nsScore):d.nsScore||'?';
     const rowBg=typeof d.nsScore==='number'?(d.nsScore>0?'#e8f5e9':d.nsScore<0?'#ffebee':'#fff8e1'):'#f5f5f5';
     rows+=`<tr style="background:${rowBg}">
-      <td style="font-weight:700;color:#1565c0;">Masa ${t}</td>
-      <td>Tur ${r}</td>
+      <td style="font-weight:700;color:#1565c0;">Table ${t}</td>
+      <td>Round ${r}</td>
       <td style="font-weight:700;">Board ${b}</td>
       <td style="color:#1565c0;">${ns.name}</td>
       <td style="color:#e65100;">${ew.name}</td>
@@ -1780,28 +1742,25 @@ function renderTablesTab(){
 
 window.showQR=function(){
   const tid=_fbTourneyId;
-  if(!tid){toast('Önce turnuva oluşturun');return;}
-  // QR içine tam URL göm — telefon QR uygulamasıyla okuyunca tarayıcıda açılır
-  const pageUrl=window.location.href.split('?')[0];
-  const qrData=pageUrl+'?tid='+encodeURIComponent(tid);
-  openModal('📱 QR Kod — Masa Girişi',`
-    <div style="text-align:center;padding:6px 0;">
-      <div style="font-size:0.8rem;color:var(--text2);margin-bottom:10px;">
-        Telefon QR uygulamasıyla okuyun → Tarayıcıda açılır → Masa numarası girin
+  if(!tid){toast('Create a tournament first');return;}
+  // QR encodes the full URL — phone opens it and auto-connects
+  const baseUrl=window.location.origin+window.location.pathname;
+  const qrData=baseUrl+'?tid='+encodeURIComponent(tid);
+  openModal('📱 QR Code — Connect Table Devices',`
+    <div style="text-align:center;padding:10px 0;">
+      <div style="font-size:0.8rem;color:var(--text2);margin-bottom:6px;">
+        Scan with any QR reader app. Opens this app and connects automatically.
       </div>
-      <div id="qrCanvas" style="display:inline-block;background:#fff;padding:14px;border-radius:10px;margin-bottom:10px;"></div>
-      <div style="background:var(--surface2);border-radius:8px;padding:8px 14px;margin-bottom:8px;">
-        <span style="font-size:0.7rem;color:var(--text3);">Turnuva ID: </span>
-        <span style="font-family:'Share Tech Mono',monospace;font-size:0.85rem;color:var(--gold);font-weight:700;">${tid}</span>
+      <div style="font-size:0.72rem;color:var(--green);background:var(--greendim);border-radius:6px;padding:5px 10px;margin-bottom:12px;">
+        📱 Then select Table and enter table number
       </div>
-      <div style="font-size:0.72rem;color:var(--text3);line-height:1.6;">
-        📱 QR okuyunca link açılır<br>
-        🔢 Sadece masa numarasını girin<br>
-        ✏️ İsim girişi isteğe bağlı
+      <div id="qrCanvas" style="display:inline-block;background:#fff;padding:14px;border-radius:10px;"></div>
+      <div style="margin-top:12px;background:var(--surface2);border-radius:8px;padding:8px 14px;display:inline-block;max-width:100%;word-break:break-all;">
+        <span style="font-size:0.68rem;color:var(--text3);">Tournament ID: </span>
+        <span style="font-family:'Share Tech Mono',monospace;font-size:0.82rem;color:var(--gold);font-weight:700;">${tid}</span>
       </div>
     </div>`,
-    `<button class="btn btn-ghost" onclick="closeModal()">Kapat</button>`);
-  // QR oluştur
+    `<button class="btn btn-ghost" onclick="closeModal()">Close</button>`);
   setTimeout(()=>{
     const el=document.getElementById('qrCanvas');
     if(el&&window.QRCode){
@@ -1811,7 +1770,7 @@ window.showQR=function(){
   },100);
 };
 
-// QR okunduğunda otomatik bağlan (URL parametresi ile)
+// Auto-connect from URL ?tid=xxx (QR code link)
 (function(){
   const params=new URLSearchParams(window.location.search);
   const tid=params.get('tid');
@@ -1821,12 +1780,14 @@ window.showQR=function(){
     setTimeout(()=>{
       if(_fbOnlineMode){
         ['state','pairs','boards','movements','approvals','archives','logs'].forEach(k=>fbSubscribe(k));
-        // QR ile gelindi — Table sekmesini seç, masa numarası girme ekranını göster
-        _qrJoinMode=true;
-        selRole('table');
-        toast('📱 Turnuvaya bağlandı: '+tid);
       }
-    },1200);
+      // Show green auto-connect banner on login screen
+      const box=document.getElementById('qrAutoStatus');
+      const tidEl=document.getElementById('qrAutoTid');
+      if(box){box.style.display='block';}
+      if(tidEl){tidEl.textContent='Tournament: '+tid;}
+      toast('📱 Connected via QR: '+tid);
+    },1500);
   }
 })();
 
@@ -2165,7 +2126,7 @@ function renderSetup(){
     <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px;">
       ${s.status==='setup'&&s.roundCount>0?`
         <div style="font-size:0.72rem;color:var(--text3);text-align:center;margin-bottom:4px;">
-          İsim girilmemiş çiftlere otomatik isim atanır
+          Unnamed pairs get auto-assigned names. You can enter names at the table anytime.
         </div>
         <button class="btn btn-green btn-full" onclick="adminStart()">▶ Turu Başlat</button>`:''}
       ${s.status==='running'&&s.currentRound<s.roundCount?`<button class="btn btn-gold" onclick="adminNextRound()">⏭ Next Round (${s.currentRound+1})</button>`:''}
@@ -2249,13 +2210,13 @@ window.adminStart=function(){
     if(!p[k].isPhantom&&(!p[k].name||!p[k].name.trim())){
       const num=k.replace('ns_','').replace('ew_','').replace('p','');
       const dir=k.startsWith('ns_')?'NS':k.startsWith('ew_')?'EW':'';
-      p[k].name='Çift '+(dir?dir+'-':'')+num;
+      p[k].name=(dir?dir+'-':'')+num;
     }
   });
   setPairs(p);
   s.currentRound=1;s.status='running';setState(s);
-  addLog('ok','Tur 1 başladı','Turnuva başladı');
-  toast('▶ Tur 1 başladı!');refreshTopbar();renderAdminTab();
+  addLog('ok','Round 1 başladı','Turnuva başladı');
+  toast('▶ Round 1 başladı!');refreshTopbar();renderAdminTab();
 };
 window.adminNextRound=function(){
   const s=getState();
@@ -2353,7 +2314,7 @@ function renderPlayersAdmin(){
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
         <button class="btn btn-gold btn-sm" onclick="document.getElementById('boardFile').click()">📄 JSON Yükle</button>
         <button class="btn btn-blue btn-sm" onclick="adminImportHandsOpen()">🃏 PBN/LIN El Yükle</button>
-        <button class="btn btn-ghost btn-sm" onclick="toast('El yüklenmeden devam ediliyor...')">▶ Yükleme, Devam Et</button>
+        <button class="btn btn-ghost btn-sm" onclick="toast('El yüklenmeden devam ediliyor...')">▶ Yükleme, Continue</button>
       </div>
       <div class="import-drop" onclick="document.getElementById('boardFile').click()">
         <div style="font-size:2rem;">📂</div><div style="font-weight:600;">boards.json Sürükle / Seç</div>
