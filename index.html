@@ -412,10 +412,10 @@ let _fbOnlineMode=false;
 
 // ── Firebase config storage ──
 function getFBConfig(){
-  try{reroundsn JSON.parse(localStorage.getItem('bm_fbConfig'))||null;}catch{reroundsn null;}
+  try{return JSON.parse(localStorage.getItem('bm_fbConfig'))||null;}catch{return null;}
 }
 function setFBConfig(cfg){localStorage.setItem('bm_fbConfig',JSON.stringify(cfg));}
-function getFBTourneyId(){reroundsn localStorage.getItem('bm_fbTourneyId')||null;}
+function getFBTourneyId(){return localStorage.getItem('bm_fbTourneyId')||null;}
 function setFBTourneyId(id){
   localStorage.setItem('bm_fbTourneyId',id);
   _fbTourneyId=id;
@@ -429,7 +429,7 @@ function initFirebase(cfg){
       _fbDb=firebase.database(_fbApp);
       _fbOnlineMode=true;
       console.log('Firebase reconnected');
-      reroundsn true;
+      return true;
     }
     _fbApp=firebase.initializeApp(cfg);
     _fbDb=firebase.database(_fbApp);
@@ -443,7 +443,7 @@ function initFirebase(cfg){
       if(dot){dot.style.background=connected?'var(--green)':'var(--red)';}
       if(txt){txt.textContent=connected?'Canli':'Cevrimdisi';}
     });
-    reroundsn true;
+    return true;
   }catch(e){
     console.error('Firebase init error:',e);
     _fbOnlineMode=false;
@@ -2074,7 +2074,7 @@ window.showFirebasePanel=function(){
       <b style="color:var(--gold);">Tournament baslatildiginda</b> ID otomatik atanir ve sync baslar.
     </p>
     <div class="field">
-      <label>Roundnuva ID (el ile baglanti icin)</label>
+      <label>Tournament ID (el ile baglanti icin)</label>
       <input id="fb_tourneyId" value="${tid}" placeholder="Bos birak: turnuva baslatinca otomatik">
     </div>
     <div style="background:var(--surface2);border-radius:6px;padding:8px;font-size:0.72rem;color:var(--text3);margin-top:4px;">
@@ -2138,14 +2138,14 @@ window.fbConnectSimple=function(){
   let tid=(document.getElementById('fb_tourneyId').value||'').trim();
   // QR'dan gelen "bridgemate:xxx" formatını temizle
   if(tid.startsWith('bridgemate:'))tid=tid.replace('bridgemate:','');
-  if(!tid){toast('Roundnuva ID boş — önce turnuva Createun');closeModal();return;}
+  if(!tid){toast('Tournament ID boş — önce turnuva Createun');closeModal();return;}
   if(!_fbOnlineMode){
     if(!initFirebase(FIREBASE_CONFIG)){toast('Firebase baglantisi kurulamadi');return;}
   }
   setFBTourneyId(tid);
   _fbTourneyId=tid;
   ['state','pairs','boards','movements','approvals','archives','logs'].forEach(k=>fbSubscribe(k));
-  toast('Firebase baglandi — Roundnuva: '+tid);
+  toast('Firebase baglandi — Tournament: '+tid);
   closeModal();
 };
 
@@ -2217,7 +2217,7 @@ function renderSetup(){
   return`
   <div class="card">
     <div class="card-title"><span>⚙️</span> Tournament Setup</div>
-    <div class="field"><label>Roundnuva Kimliği (otomatik)</label><input id="aName" value="${s.name||''}" readonly style="cursor:default;color:var(--text3);font-size:0.82rem;" placeholder="Turnuva başlatıldığında otomatik atanır"></div>
+    <div class="field"><label>Tournament Kimliği (otomatik)</label><input id="aName" value="${s.name||''}" readonly style="cursor:default;color:var(--text3);font-size:0.82rem;" placeholder="Turnuva başlatıldığında otomatik atanır"></div>
     <div class="field-row">
       <div class="field">
         <label>Number of Players</label>
