@@ -316,16 +316,16 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 
     <!-- QR ile bağlan — Table/Screen seçince görünür -->
     <div id="qrJoinBox" style="display:none;margin:14px 0;padding:14px;background:var(--surface2);border-radius:10px;border:1px solid var(--border);text-align:center;">
-      <div style="font-size:0.82rem;font-weight:600;color:var(--gold);margin-bottom:8px;">📱 QR Kod ile Turnuvaya Bağlan</div>
-      <div style="font-size:0.75rem;color:var(--text2);margin-bottom:10px;">Admin ekranındaki QR kodu okutun</div>
-      <button class="btn btn-gold btn-full" onclick="startQRScan()" style="margin-bottom:8px;">
-        📷 QR Okut
-      </button>
-      <div id="qrScanResult" style="font-size:0.72rem;color:var(--text3);min-height:16px;"></div>
-      <div style="margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
-        <div style="font-size:0.7rem;color:var(--text3);margin-bottom:4px;">veya ID'yi elle girin</div>
+      <div style="font-size:0.82rem;font-weight:600;color:var(--gold);margin-bottom:6px;">📱 QR Kod ile Giriş</div>
+      <div style="font-size:0.75rem;color:var(--text2);margin-bottom:12px;">
+        Admin QR kodunu telefonunuzun kamera / QR uygulamasıyla okutun.<br>
+        Link açılınca masa numaranızı girin.
+      </div>
+      <div id="qrScanResult" style="font-size:0.72rem;color:var(--text3);min-height:16px;margin-bottom:8px;"></div>
+      <div style="border-top:1px solid var(--border);padding-top:10px;">
+        <div style="font-size:0.72rem;color:var(--text3);margin-bottom:6px;">Veya Turnuva ID'yi elle girin:</div>
         <div style="display:flex;gap:6px;">
-          <input id="manualTid" placeholder="2026-06-25_1435" style="flex:1;padding:6px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.8rem;outline:none;">
+          <input id="manualTid" placeholder="2026-06-25_1435" style="flex:1;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.82rem;outline:none;" onkeydown="if(event.key==='Enter')joinByTid()">
           <button class="btn btn-blue btn-sm" onclick="joinByTid()">Bağlan</button>
         </div>
       </div>
@@ -901,6 +901,7 @@ let bmSide='ns'; // 'ns' or 'ew' — which side is this device
 let boardForm={level:null,suit:null,declarer:null,result:0,doubled:'',leadSuit:'',leadRank:'',isPass:false};
 let bmPollInterval=null;
 let bmTableState='select'; // 'select'|'confirm'|'play'|'approve'|'round_over'|'waiting'|'new_players'
+let _qrJoinMode=false; // QR ile gelindi mi?
 
 function renderTablePanel(){
   bmTableNo=null;bmTableState='select';
@@ -908,25 +909,27 @@ function renderTablePanel(){
   const s=getState();
   const c=document.getElementById('panelContent');
   if(s.status==='setup'){
-    c.innerHTML=`<div class="empty-state"><div class="empty-icon">⏳</div><div style="font-weight:600;margin-bottom:4px;">Tournament not started</div><div style="font-size:0.82rem;">Ask the director to start the tournament</div></div>`;
+    c.innerHTML=`<div class="empty-state"><div class="empty-icon">⏳</div><div style="font-weight:600;margin-bottom:4px;">Turnuva henüz başlamadı</div><div style="font-size:0.82rem;">Direktörden turnuvayı başlatmasını isteyin</div></div>`;
     return;
   }
   c.innerHTML=`
     <div class="bm-device">
       <div class="bm-lcd">
         <div class="bm-lcd-row">BRIDGEMATE  v4.0   </div>
-        <div class="bm-lcd-row inv">ROUND ${String(s.currentRound).padStart(2,'0')}    ${s.name.slice(0,12).toUpperCase()}</div>
-        <div class="bm-lcd-row">ENTER TABLE NUMBER </div>
+        <div class="bm-lcd-row inv">TUR ${String(s.currentRound).padStart(2,'0')}    ${(s.name||'').slice(0,12).toUpperCase()}</div>
+        <div class="bm-lcd-row">MASA NUMARANIZI GIRIN</div>
         <div class="bm-lcd-row blink">_________________  </div>
       </div>
-      <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:14px;margin-top:6px;">
         <input type="number" id="tableInput" min="1" max="${s.tableCount}" inputmode="numeric"
-          style="font-family:'Share Tech Mono',monospace;font-size:2rem;text-align:center;padding:12px;width:140px;background:var(--lcdbg);border:2px solid var(--lcd);border-radius:6px;color:var(--lcd);outline:none;">
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-ghost" onclick="bmSetSide('ns');bmSelectTable()">🔵 NS Side</button>
-          <button class="btn btn-ghost" onclick="bmSetSide('ew');bmSelectTable()">🟡 EW Side</button>
+          placeholder="Masa No"
+          style="font-family:'Share Tech Mono',monospace;font-size:2.4rem;text-align:center;padding:14px;width:160px;background:var(--lcdbg);border:2px solid var(--lcd);border-radius:8px;color:var(--lcd);outline:none;">
+        <div style="font-size:0.75rem;color:var(--text3);">1 – ${s.tableCount} arası</div>
+        <div style="display:flex;gap:8px;width:100%;max-width:260px;">
+          <button class="btn btn-blue" style="flex:1;" onclick="bmSetSide('ns');bmSelectTable()">🔵 NS</button>
+          <button class="btn btn-gold" style="flex:1;" onclick="bmSetSide('ew');bmSelectTable()">🟡 EW</button>
         </div>
-        <button class="btn btn-gold" style="min-width:180px;" onclick="bmSelectTable()">SELECT TABLE →</button>
+        <button class="btn btn-green btn-full" style="max-width:260px;" onclick="bmSelectTable()">→ GİRİŞ</button>
       </div>
     </div>`;
   setTimeout(()=>document.getElementById('tableInput')?.focus(),80);
@@ -943,11 +946,77 @@ window.bmSelectTable=function(){
   const n=parseInt(document.getElementById('tableInput')?.value||'');
   if(isNaN(n)||n<1||n>s.tableCount){toast('❌ Geçerli masa numarası girin (1-'+s.tableCount+')');return;}
   bmTableNo=n;
-  // Oturumu localStorage'a kaydet — sayfa yenilenince kaldığı yerden devam etsin
   localStorage.setItem('bm_tableSession',JSON.stringify({
     tableNo:n, side:bmSide, tid:_fbTourneyId, ts:Date.now()
   }));
-  renderTableDetail(n);
+  // Çiftin mevcut ismini kontrol et
+  const movements=getMovements();
+  const pairs=getPairs();
+  const mk=s.currentRound+'_'+n;
+  const m=movements[mk]||{};
+  const pairKey=bmSide==='ns'?m.ns:m.ew;
+  const pair=pairs[pairKey]||{};
+  const hasName=pair.name&&pair.name.trim()&&!pair.name.startsWith('Çift ');
+  // İsim yoksa opsiyonel isim girme ekranı göster
+  if(!hasName){
+    bmShowNameEntry(n,pairKey,pair.name||'');
+  } else {
+    renderTableDetail(n);
+  }
+};
+
+window.bmShowNameEntry=function(tableNo,pairKey,currentName){
+  const s=getState();
+  const movements=getMovements();
+  const mk=s.currentRound+'_'+tableNo;
+  const m=movements[mk]||{};
+  const pairs=getPairs();
+  const nsPair=pairs[m.ns]||{name:'—'};
+  const ewPair=pairs[m.ew]||{name:'—'};
+  const c=document.getElementById('panelContent');
+  c.innerHTML=`
+    <div class="bm-device" style="max-width:360px;">
+      <div class="bm-lcd" style="margin-bottom:16px;">
+        <div class="bm-lcd-row inv">MASA ${String(tableNo).padStart(2,' ')} — İSİM GİRİŞİ</div>
+        <div class="bm-lcd-row">NS: ${nsPair.name.slice(0,16).padEnd(16)}</div>
+        <div class="bm-lcd-row">EW: ${ewPair.name.slice(0,16).padEnd(16)}</div>
+      </div>
+      <div class="card">
+        <div class="card-title"><span>✏️</span> Çift Adı (İsteğe Bağlı)</div>
+        <div style="font-size:0.8rem;color:var(--text2);margin-bottom:12px;">
+          İsim girmek zorunda değilsiniz. Boş bırakırsanız otomatik isim atanır.
+        </div>
+        <div class="field">
+          <label>${bmSide==='ns'?'🔵 NS Çifti Adı':'🟡 EW Çifti Adı'}</label>
+          <input id="pairNameInput" value="${currentName||''}" placeholder="Örn: Ali & Ayşe" 
+            style="font-size:1rem;"
+            onkeydown="if(event.key==='Enter')bmSaveNameAndGo(${tableNo},'${pairKey||''}')">
+        </div>
+        <div style="display:flex;gap:8px;margin-top:4px;">
+          <button class="btn btn-ghost" style="flex:1;" onclick="renderTableDetail(${tableNo})">
+            Atla →
+          </button>
+          <button class="btn btn-gold" style="flex:1;" onclick="bmSaveNameAndGo(${tableNo},'${pairKey||''}')">
+            ✅ Kaydet & Gir
+          </button>
+        </div>
+      </div>
+    </div>`;
+  setTimeout(()=>document.getElementById('pairNameInput')?.focus(),80);
+};
+
+window.bmSaveNameAndGo=function(tableNo,pairKey){
+  const nameInput=document.getElementById('pairNameInput');
+  const name=(nameInput?.value||'').trim();
+  if(name&&pairKey){
+    const pairs=getPairs();
+    if(pairs[pairKey]){
+      pairs[pairKey].name=name;
+      setPairs(pairs);
+      toast('✅ İsim kaydedildi: '+name);
+    }
+  }
+  renderTableDetail(tableNo);
 };
 
 function renderTableDetail(tableNo){
@@ -1712,21 +1781,23 @@ function renderTablesTab(){
 window.showQR=function(){
   const tid=_fbTourneyId;
   if(!tid){toast('Önce turnuva oluşturun');return;}
-  // QR içine sadece tourneyId göm — diğer cihaz okuyunca otomatik bağlansın
-  const qrData='bridgemate:'+tid;
-  openModal('📱 QR Kod ile Bağlan',`
-    <div style="text-align:center;padding:10px 0;">
-      <div style="font-size:0.8rem;color:var(--text2);margin-bottom:14px;">
-        Diğer cihazlar bu QR'ı okusun — otomatik bağlanır
+  // QR içine tam URL göm — telefon QR uygulamasıyla okuyunca tarayıcıda açılır
+  const pageUrl=window.location.href.split('?')[0];
+  const qrData=pageUrl+'?tid='+encodeURIComponent(tid);
+  openModal('📱 QR Kod — Masa Girişi',`
+    <div style="text-align:center;padding:6px 0;">
+      <div style="font-size:0.8rem;color:var(--text2);margin-bottom:10px;">
+        Telefon QR uygulamasıyla okuyun → Tarayıcıda açılır → Masa numarası girin
       </div>
-      <div id="qrCanvas" style="display:inline-block;background:#fff;padding:14px;border-radius:10px;"></div>
-      <div style="margin-top:12px;background:var(--surface2);border-radius:8px;padding:8px 14px;display:inline-block;">
+      <div id="qrCanvas" style="display:inline-block;background:#fff;padding:14px;border-radius:10px;margin-bottom:10px;"></div>
+      <div style="background:var(--surface2);border-radius:8px;padding:8px 14px;margin-bottom:8px;">
         <span style="font-size:0.7rem;color:var(--text3);">Turnuva ID: </span>
         <span style="font-family:'Share Tech Mono',monospace;font-size:0.85rem;color:var(--gold);font-weight:700;">${tid}</span>
       </div>
-      <div style="margin-top:10px;font-size:0.72rem;color:var(--text3);">
-        QR okuyamıyorsa ID'yi elle girin:<br>
-        ⚡ Firebase Sync Ayarla → Turnuva ID alanı
+      <div style="font-size:0.72rem;color:var(--text3);line-height:1.6;">
+        📱 QR okuyunca link açılır<br>
+        🔢 Sadece masa numarasını girin<br>
+        ✏️ İsim girişi isteğe bağlı
       </div>
     </div>`,
     `<button class="btn btn-ghost" onclick="closeModal()">Kapat</button>`);
@@ -1740,9 +1811,8 @@ window.showQR=function(){
   },100);
 };
 
-// QR okunduğunda otomatik bağlan (URL hash veya deep link)
+// QR okunduğunda otomatik bağlan (URL parametresi ile)
 (function(){
-  // Eğer URL'de ?tid=xxx varsa otomatik bağlan
   const params=new URLSearchParams(window.location.search);
   const tid=params.get('tid');
   if(tid){
@@ -1751,9 +1821,12 @@ window.showQR=function(){
     setTimeout(()=>{
       if(_fbOnlineMode){
         ['state','pairs','boards','movements','approvals','archives','logs'].forEach(k=>fbSubscribe(k));
-        toast('📱 QR ile bağlandı: '+tid);
+        // QR ile gelindi — Table sekmesini seç, masa numarası girme ekranını göster
+        _qrJoinMode=true;
+        selRole('table');
+        toast('📱 Turnuvaya bağlandı: '+tid);
       }
-    },2000);
+    },1200);
   }
 })();
 
