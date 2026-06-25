@@ -1786,33 +1786,52 @@ function _openCamera(){
     </div>`,
     `<button class="btn btn-ghost" onclick="stopQRScan();closeModal()">Kapat</button>`);
 
-  navigator.mediaDevices.getUserMedia({video:{facingMode:'environment'}})
-    .then(stream=>{
-      _qrStream=stream;
-      const video=document.getElementById('qrVideo');
-      if(!video){stopQRScan();return;}
-      video.srcObject=stream;
-      video.play();
-      document.getElementById('qrScanStatus').textContent='QR kodu gösterin...';
-      _scanFrame(video);
-    })
-    .catch(e=>{
+  // DOM'un render edilmesini bekle, sonra kamerayı aç
+  setTimeout(function(){
+    if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
       const el=document.getElementById('qrScanStatus');
-      if(el)el.textContent='Kamera erişimi reddedildi. Elle ID girin.';
-    });
+      if(el)el.textContent='❌ Kamera desteklenmiyor. Elle ID girin.';
+      return;
+    }
+    navigator.mediaDevices.getUserMedia({video:{facingMode:'environment',width:{ideal:1280},height:{ideal:720}}})
+      .then(stream=>{
+        _qrStream=stream;
+        const video=document.getElementById('qrVideo');
+        if(!video){stopQRScan();return;}
+        video.srcObject=stream;
+        video.play().then(()=>{
+          document.getElementById('qrScanStatus').textContent='QR kodu gösterin...';
+          _scanFrame(video);
+        }).catch(()=>{
+          document.getElementById('qrScanStatus').textContent='QR kodu gösterin...';
+          _scanFrame(video);
+        });
+      })
+      .catch(e=>{
+        const el=document.getElementById('qrScanStatus');
+        if(!el)return;
+        if(e.name==='NotAllowedError'||e.name==='PermissionDeniedError'){
+          el.textContent='❌ Kamera izni reddedildi. Tarayıcı ayarlarından izin verin veya elle ID girin.';
+        } else if(e.name==='NotFoundError'){
+          el.textContent='❌ Kamera bulunamadı. Elle ID girin.';
+        } else {
+          el.textContent='❌ Kamera açılamadı: '+e.message+'. Elle ID girin.';
+        }
+      });
+  }, 150);
 }
 
 function _scanFrame(video){
-  if(!video||!video.parentElement){stopQRScan();return;}
+  if(!video||!document.getElementById('qrVideo')){stopQRScan();return;}
   const canvas=document.getElementById('qrCanvas2');
   if(!canvas)return;
   const ctx=canvas.getContext('2d');
-  if(video.readyState===video.HAVE_ENOUGH_DATA){
+  if(video.readyState>=2&&video.videoWidth>0&&video.videoHeight>0){
     canvas.width=video.videoWidth;
     canvas.height=video.videoHeight;
     ctx.drawImage(video,0,0);
     const img=ctx.getImageData(0,0,canvas.width,canvas.height);
-    const code=window.jsQR&&jsQR(img.data,img.width,img.height);
+    const code=window.jsQR&&jsQR(img.data,img.width,img.height,{inversionAttempts:'dontInvert'});
     if(code&&code.data){
       stopQRScan();
       closeModal();
