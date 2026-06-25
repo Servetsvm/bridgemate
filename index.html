@@ -513,7 +513,7 @@ function buildOtherHTMLGlobal(boardNo_,tableNo_,round_){
   if(!boardNo_)return'';
   const s_=getState();
   const others=getOtherTablesSameBoard(boardNo_,tableNo_||bmTableNo,round_||s_.currentRound);
-  if(!others.length)return'<div style="font-size:0.75rem;color:var(--text3);margin-top:8px;text-align:center;">Other tables haven't played this board yet</div>';
+  if(!others.length)return'<div style="font-size:0.75rem;color:var(--text3);margin-top:8px;text-align:center;">Other tables haven&apos;t played this board yet</div>';
   let h='<div style="margin-top:10px;"><div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Ayni board - Diger tableslar</div>';
   others.forEach(function(o){
     const sc=o.nsScore>0?'var(--green)':o.nsScore<0?'var(--red)':'var(--gold)';
@@ -1547,7 +1547,7 @@ function renderApprovalWaiting(boardNo,boardData,key){
 
   function buildOtherHTML(){
     const others=getOtherTablesSameBoard(boardNo,bmTableNo,s.currentRound);
-    if(!others.length)return '<div style="font-size:0.75rem;color:var(--text3);margin-top:8px;text-align:center;">Diger tableslar henuz haven't played</div>';
+    if(!others.length)return '<div style="font-size:0.75rem;color:var(--text3);margin-top:8px;text-align:center;">Diger tableslar henuz henüz oynamadı</div>';
     let h='<div style="margin-top:10px;"><div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Same board — Other tables</div>';
     others.forEach(function(o){
       const sc=o.nsScore>0?'var(--green)':o.nsScore<0?'var(--red)':'var(--gold)';
