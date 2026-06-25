@@ -1482,6 +1482,7 @@ window.saveBoardAndSendApproval=function(boardNo){
   addLog('ok',`Board ${boardNo} sent for approval`,`Table ${bmTableNo} | ${boardData.contract}`);
 
   // Show approval waiting screen
+  window._lastBoardData=boardData;
   renderApprovalWaiting(boardNo,boardData,key);
 };
 
@@ -1540,7 +1541,7 @@ function renderApprovalWaiting(boardNo,boardData,key){
         <div class="approval-score" style="color:${scoreColor};">NS: ${scoreStr}</div>
         <div class="approval-waiting">Waiting for opponent to confirm on their device...</div>
         <div id="otherTablesDiv">${otherTablesHTML}</div>
-        <button class="btn btn-blue btn-full" style="margin-top:8px;" onclick="showBoardComparison(${boardNo},${bmTableNo},${JSON.stringify(boardData).replace(/"/g,'&quot;')})">📊 Show Results vs Other Tables</button>
+        <button class="btn btn-blue btn-full" style="margin-top:8px;" onclick="showBoardComparison(${boardNo},${bmTableNo})">📊 Show Results vs Other Tables</button>
         <div style="display:flex;gap:8px;margin-top:6px;">
           <button class="btn btn-ghost btn-full" onclick="bmCancelApproval('${key}');renderTableDetail(${bmTableNo});">✕ Cancel</button>
           <button class="btn btn-green btn-full" onclick="bmSelfApprove('${key}',${bmTableNo})">✅ Both Confirmed</button>
@@ -1577,7 +1578,8 @@ function renderApprovalWaiting(boardNo,boardData,key){
 };
 
 // ── Board Comparison Modal ──
-window.showBoardComparison=function(boardNo,myTable,boardData){
+window.showBoardComparison=function(boardNo,myTable){
+  const boardData=_lastBoardData||{};
   const s=getState();
   const movements=getMovements();
   const boards=getBoards();
@@ -2837,7 +2839,7 @@ window.viewArchive=function(i){
      <button class="btn btn-blue btn-sm" onclick="archivePDF(${i})">Print PDF</button>`);
 };
 
-window.archivePDFLegacy=function(i){
+window.archivePDF=function(i){
   const a=getArchives()[i];if(!a)return;
   const mpData=calcMPFromData(a.boards,a.movements);
   const pairs=a.pairs||{};
