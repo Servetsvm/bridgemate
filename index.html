@@ -1839,7 +1839,7 @@ window.showQR=function(){
     } else if(attempt<10){
       setTimeout(()=>tryRenderQR(attempt+1),300);
     } else {
-      if(el)el.innerHTML='<div style="font-size:0.72rem;color:var(--text3);padding:10px;">QR yüklenemedi — ID'yi elle paylaşın:<br><b style=color:var(--gold)>'+tid+'</b></div>';
+      if(el)el.innerHTML='<div style="font-size:0.72rem;color:var(--text3);padding:10px;">QR yuklenemedi — ID elle paylasin:<br><b style=color:var(--gold)>'+tid+'</b></div>';
     }
   }
   setTimeout(()=>tryRenderQR(0),150);
