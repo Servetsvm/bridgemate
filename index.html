@@ -728,7 +728,12 @@ function getNextRoundInfo(tableNo,currentRound,state,movements,pairs){
 // ══════════════════════════════════════════════════════
 //  AUTH
 // ══════════════════════════════════════════════════════
-const PASS={admin:'2370',table:'1234'};
+const PASS_DEFAULT={admin:'2370',table:'1234'};
+const PASS={
+  get admin(){return localStorage.getItem('bm_pass_admin')||PASS_DEFAULT.admin;},
+  get table(){return localStorage.getItem('bm_pass_table')||PASS_DEFAULT.table;}
+};
+function savePass(role,val){localStorage.setItem('bm_pass_'+role,val);}
 let role='admin';
 
 window.selRole=function(r){
@@ -1267,12 +1272,14 @@ window.bmShowNewPlayers=function(tableNo,roundNo){
           <div class="pair-box pair-box-ns">
             <div class="pb-label">🔵 North-South</div>
             <div class="pb-num">${nsNum}</div>
-            <div class="pb-name">${nsPair.name}</div>
+            <div class="pb-name">${nsPair.name||'İsim yok'}</div>
+            <span onclick="editPairNameTable('${nsNum}')" style="font-size:0.65rem;color:var(--gold);cursor:pointer;display:block;margin-top:3px;">✏️ isim gir</span>
           </div>
           <div class="pair-box pair-box-ew">
             <div class="pb-label">🟡 East-West</div>
             <div class="pb-num">${ewNum}</div>
-            <div class="pb-name">${ewPair.name}${ewPair.isPhantom?' 👻':''}</div>
+            <div class="pb-name">${ewPair.name||'İsim yok'}${ewPair.isPhantom?' 👻':''}</div>
+            <span onclick="editPairNameTable('${ewNum}')" style="font-size:0.65rem;color:var(--gold);cursor:pointer;display:block;margin-top:3px;">✏️ isim gir</span>
           </div>
         </div>
         <div style="background:var(--surface2);border-radius:8px;padding:12px;margin-bottom:16px;">
@@ -1578,6 +1585,16 @@ function renderApprovalWaiting(boardNo,boardData,key){
         delete aps[key];setApprovals(aps);
       }
       addLog('ok','Board '+boardNo+' onaylandi',boardData.contract||'PASS');
+      // Onay sonrası MP/IMP karşılaştırmasını göster
+      const cmpHtml=buildCompareHTML(boardNo,boardData.nsScore,boardData.contract,bmTableNo,s.currentRound);
+      if(cmpHtml){
+        const div=document.getElementById('otherTablesDiv');
+        if(div){
+          div.innerHTML='<div style="margin-top:8px;"><div style="color:var(--green);font-weight:700;font-size:0.85rem;margin-bottom:6px;">✅ Onaylandı!</div>'+cmpHtml+'</div>';
+          setTimeout(()=>renderTableDetail(bmTableNo),4000);
+          return true;
+        }
+      }
       toast('✅ Onaylandi! Siradaki board.');
       renderTableDetail(bmTableNo);
       return true;
@@ -1654,19 +1671,25 @@ window.screenPrintPDF=function(){
   keys.forEach(k=>{
     const d=boards[k];const[t,r,b]=k.split('_');
     const m=movements[r+'_'+t]||{};
-    const ns=pairs[m.ns]||{name:m.ns||'?'};
-    const ew=pairs[m.ew]||{name:m.ew||'?'};
+    const ns=pairs[m.ns]||{name:'?'};
+    const ew=pairs[m.ew]||{name:'?'};
+    // Çift numarası + isim birlikte
+    const nsLabel=(m.ns||'?')+(ns.name&&ns.name!==m.ns?' '+ns.name:'');
+    const ewLabel=(m.ew||'?')+(ew.name&&ew.name!==m.ew?' '+ew.name:'');
     const sc=typeof d.nsScore==='number'?((d.nsScore>0?'+':'')+d.nsScore):d.nsScore||'?';
     const rowBg=typeof d.nsScore==='number'?(d.nsScore>0?'#e8f5e9':d.nsScore<0?'#ffebee':'#fff8e1'):'#f5f5f5';
+    // Bidding varsa göster
+    const bidding=d.bidding||d.auction||'';
     rows+=`<tr style="background:${rowBg}">
       <td style="font-weight:700;color:#1565c0;">Masa ${t}</td>
       <td>Tur ${r}</td>
       <td style="font-weight:700;">Board ${b}</td>
-      <td style="color:#1565c0;">${ns.name}</td>
-      <td style="color:#e65100;">${ew.name}</td>
+      <td style="color:#1565c0;font-size:9.5px;">${nsLabel}</td>
+      <td style="color:#e65100;font-size:9.5px;">${ewLabel}</td>
       <td style="font-family:monospace;">${d.adjusted?'[ADJ] ':''}\${d.contract||'PASS'}</td>
       <td style="font-family:monospace;color:#555;">${d.lead||'—'}</td>
       <td style="font-weight:700;color:${typeof d.nsScore==='number'?(d.nsScore>0?'#2e7d32':d.nsScore<0?'#c62828':'#555'):'#7b1fa2'};">${sc}</td>
+      <td style="font-family:monospace;font-size:8.5px;color:#666;">${bidding||'—'}</td>
     </tr>`;
   });
 
@@ -1708,7 +1731,7 @@ window.screenPrintPDF=function(){
   <h2>🏆 Genel Sıralama</h2>
   <table><thead><tr><th>#</th><th>Oyuncu</th><th>Yön</th><th>MP</th><th>%</th></tr></thead><tbody>${rankRows}</tbody></table>
   <h2>📊 Tüm Tamamlanan Board Sonuclari</h2>
-  <table><thead><tr><th>Masa</th><th>Tur</th><th>Board</th><th>NS Cifti</th><th>EW Cifti</th><th>Kontrat</th><th>İlk Hamle</th><th>NS Puan</th></tr></thead><tbody>${rows}</tbody></table>
+  <table><thead><tr><th>Masa</th><th>Tur</th><th>Board</th><th>NS (No+İsim)</th><th>EW (No+İsim)</th><th>Kontrat</th><th>İlk</th><th>NS Puan</th><th>Bidding</th></tr></thead><tbody>${rows}</tbody></table>
   <script>window.onload=function(){window.print();}<\/script>
   </body></html>`);
   win.document.close();
@@ -1778,8 +1801,10 @@ function renderTablesTab(){
 // ══════════════════════════════════════════════════════
 
 window.showQR=function(){
-  const tid=_fbTourneyId;
+  // _fbTourneyId yoksa localStorage'dan al
+  const tid=_fbTourneyId||getFBTourneyId()||(getState()&&getState().name?makeTourneyId(getState().name):null);
   if(!tid){toast('Önce turnuva oluşturun');return;}
+  if(!_fbTourneyId){setFBTourneyId(tid);}
   // QR içine tam URL göm — telefon QR uygulamasıyla okuyunca tarayıcıda açılır
   const pageUrl=window.location.href.split('?')[0];
   const qrData=pageUrl+'?tid='+encodeURIComponent(tid);
@@ -1801,13 +1826,23 @@ window.showQR=function(){
     </div>`,
     `<button class="btn btn-ghost" onclick="closeModal()">Kapat</button>`);
   // QR oluştur
-  setTimeout(()=>{
+  function tryRenderQR(attempt){
     const el=document.getElementById('qrCanvas');
-    if(el&&window.QRCode){
+    if(!el)return;
+    if(window.QRCode){
       el.innerHTML='';
-      new QRCode(el,{text:qrData,width:200,height:200,colorDark:'#000',colorLight:'#fff'});
+      try{
+        new QRCode(el,{text:qrData,width:200,height:200,colorDark:'#000',colorLight:'#fff'});
+      }catch(e){
+        el.innerHTML='<div style="font-size:0.75rem;color:#c00;padding:10px;">QR oluşturulamadı</div>';
+      }
+    } else if(attempt<10){
+      setTimeout(()=>tryRenderQR(attempt+1),300);
+    } else {
+      if(el)el.innerHTML='<div style="font-size:0.72rem;color:var(--text3);padding:10px;">QR yüklenemedi — ID'yi elle paylaşın:<br><b style=color:var(--gold)>'+tid+'</b></div>';
     }
-  },100);
+  }
+  setTimeout(()=>tryRenderQR(0),150);
 };
 
 // QR okunduğunda otomatik bağlan (URL parametresi ile)
@@ -1954,6 +1989,71 @@ function _applyTid(tid){
   if(txt)txt.textContent='Canlı';
   toast('✅ Turnuvaya bağlandı: '+tid);
 }
+
+function calcIMP(diff){
+  const tbl=[15,45,85,125,165,215,265,315,365,425,495,595,745,895,1095,1295,1495,1745,1995,2245,2495,2995,3495,3995];
+  const pts=[10,20,30,40,50,60,70,80,90,100,110,120,130,140,150,160,170,180,190,200,210,220,230,240];
+  const a=Math.abs(diff);
+  for(let i=0;i<tbl.length;i++){if(a<tbl[i])return diff>=0?pts[i]:-pts[i];}
+  return diff>=0?24:-24;
+}
+
+function buildCompareHTML(boardNo,myNsScore,myContract,myTableNo,round){
+  const others=getOtherTablesSameBoard(boardNo,myTableNo,round);
+  const s=getState();const scoring=s.scoring||'MP';
+  if(!others.length)return '';
+  let h=`<div style="background:var(--surface2);border-radius:8px;padding:10px;margin-top:8px;">
+    <div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:8px;">
+      Board ${boardNo} — Karşılaştırma (${scoring})
+    </div>`;
+  others.forEach(o=>{
+    let badge='';
+    if(scoring==='IMP'){
+      const imp=calcIMP(myNsScore-o.nsScore);
+      const col=imp>0?'var(--green)':imp<0?'var(--red)':'var(--gold)';
+      badge=`<span style="font-weight:700;color:${col};font-size:0.85rem;">${imp>0?'+':''}${imp} IMP</span>`;
+    } else {
+      const beat=others.filter(x=>myNsScore>x.nsScore).length;
+      const tie=others.filter(x=>myNsScore===x.nsScore).length;
+      const mp=(beat*2+tie)/2;
+      const maxMp=others.length;
+      const col=mp>=maxMp?'var(--green)':mp===0?'var(--red)':'var(--gold)';
+      badge=`<span style="font-weight:700;color:${col};font-size:0.85rem;">${mp} MP</span>`;
+    }
+    const sc=o.nsScore>0?'var(--green)':o.nsScore<0?'var(--red)':'var(--gold)';
+    h+=`<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:0.78rem;">
+      <span style="color:var(--text3);">Masa ${o.table}</span>
+      <span style="font-family:'Share Tech Mono',monospace;">${o.contract||'?'}</span>
+      <span style="color:${sc};">${o.nsScore>0?'+':''}${o.nsScore}</span>
+      ${badge}
+    </div>`;
+  });
+  return h+'</div>';
+}
+
+window.showChangePass=function(){
+  openModal('🔑 Şifre Değiştir',`
+    <div class="field">
+      <label>Admin Şifresi <span style="color:var(--text3);font-size:0.72rem;">(mevcut: ${PASS.admin})</span></label>
+      <input id="cpAdmin" type="text" placeholder="Yeni admin şifresi">
+    </div>
+    <div class="field">
+      <label>Table Şifresi <span style="color:var(--text3);font-size:0.72rem;">(mevcut: ${PASS.table})</span></label>
+      <input id="cpTable" type="text" placeholder="Yeni table şifresi">
+    </div>
+    <div style="font-size:0.72rem;color:var(--text3);margin-top:4px;">Boş bırakılan alanlar değişmez.</div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Vazgeç</button>
+     <button class="btn btn-gold" onclick="doChangePass()">Kaydet</button>`);
+};
+window.doChangePass=function(){
+  const na=(document.getElementById('cpAdmin')?.value||'').trim();
+  const nt=(document.getElementById('cpTable')?.value||'').trim();
+  if(na){savePass('admin',na);}
+  if(nt){savePass('table',nt);}
+  if(na||nt){toast('✅ Şifre(ler) güncellendi');}
+  else{toast('⚠️ Değişiklik yapılmadı');}
+  closeModal();
+};
 
 window.showFirebasePanel=function(){
   const cfg=getFBConfig()||{};
@@ -2177,6 +2277,7 @@ function renderSetup(){
       <button class="btn btn-blue" onclick="adminExport()">⬇ Export</button>
       <button class="btn btn-purple" onclick="adminImportOpen()">⬆ Import</button>
       <button class="btn btn-red" onclick="adminReset()">🗑 Reset</button>
+      <button class="btn btn-ghost btn-sm" onclick="showChangePass()">🔑 Şifre</button>
     </div>
     <div style="margin-top:10px;padding-top:10px;border-top:1px solid var(--border);">
       <div class="card-title" style="margin-bottom:6px;"><span>⚡</span> Firebase Sync</div>
@@ -2186,7 +2287,7 @@ function renderSetup(){
           <span style="color:var(--text2);">${_fbOnlineMode?('Aktif • '+(_fbTourneyId||'')):'Bagli degil'}</span>
         </div>
         <button class="btn btn-gold btn-sm" onclick="showFirebasePanel()">⚙️ Ayarlar</button>
-        ${_fbTourneyId?`<button class="btn btn-blue btn-sm" onclick="showQR()">📱 QR Kod</button>`:''}
+        <button class="btn btn-blue btn-sm" onclick="showQR()">📱 QR Kod</button>
       </div>
     </div>
   </div>`;
@@ -2235,9 +2336,8 @@ window.adminSetup=function(){
   // Auto-connect Firebase with tournament ID based on name
   fbAutoConnectOnSetup(name);
   addLog('ok','Tournament created',`${players} players, ${tables} tables, ${result.rounds} rounds, ${mov}, ${scoring}`);
-  toast('✅ Turnuva olusturuldu! Oyuncu isimlerini girin.');
-  adminTab='players';
-  refreshTopbar();renderAdminPanel();
+  toast('✅ Turnuva oluşturuldu! İsim girmek opsiyonel — istediğiniz zaman Players sekmesinden ekleyebilirsiniz.');
+  refreshTopbar();renderAdminTab();
 };
 
 window.adminStart=function(){
