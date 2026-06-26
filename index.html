@@ -1,12 +1,12 @@
 <!DOCTYPE html>
-<!-- saved from url=(0049)https://servetsvm.github.io/bridgemate/index.html -->
-<html lang="en" data-theme="dark"><script src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/content/location/location.js" id="eppiocemhmnlbhjplcgkofciiegomcon"></script><script src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/libs/extend-native-history-api.js"></script><script src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/libs/requests.js"></script><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+<html lang="en" data-theme="dark"><head><meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>BridgeMate · Tournament System</title>
-<script src="./BridgeMate · Tournament System_files/firebase-app-compat.js.indir"></script><script bis_use="true" type="text/javascript" charset="utf-8" nonce="" data-dynamic-id="4337879a-144e-439b-bad2-90478325e135" src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/executors/200.js"></script><script bis_use="true" type="text/javascript" charset="utf-8" nonce="" data-dynamic-id="4337879a-144e-439b-bad2-90478325e135" src="chrome-extension://eppiocemhmnlbhjplcgkofciiegomcon/executors/101.js"></script>
-<script src="./BridgeMate · Tournament System_files/firebase-database-compat.js.indir"></script>
-<script src="./BridgeMate · Tournament System_files/qrcode.min.js.indir"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@700;900&family=DM+Sans:wght@300;400;500;600;700&family=Share+Tech+Mono&display=swap');
 :root{
@@ -299,43 +299,43 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 </style>
 </head>
 <body __processed_32b248b6-bce9-4dcd-bd86-e893436047fa__="true" bis_register="W3sibWFzdGVyIjp0cnVlLCJleHRlbnNpb25JZCI6ImVwcGlvY2VtaG1ubGJoanBsY2drb2ZjaWllZ29tY29uIiwiYWRibG9ja2VyU3RhdHVzIjp7IkRJU1BMQVkiOiJlbmFibGVkIiwiRkFDRUJPT0siOiJlbmFibGVkIiwiVFdJVFRFUiI6ImVuYWJsZWQiLCJSRURESVQiOiJlbmFibGVkIiwiUElOVEVSRVNUIjoiZW5hYmxlZCIsIklOU1RBR1JBTSI6ImVuYWJsZWQiLCJUSUtUT0siOiJkaXNhYmxlZCIsIkxJTktFRElOIjoiZW5hYmxlZCIsIkNPTkZJRyI6ImRpc2FibGVkIn0sInZlcnNpb24iOiIyLjEuMSIsInNjb3JlIjoyMDEwMTB9XQ==">
-<div id="toast" bis_skin_checked="1"></div>
+<div id="toast"></div>
 
 <!-- LOGIN -->
-<div id="loginScreen" bis_skin_checked="1" style="display: flex;">
-  <div class="login-box" bis_skin_checked="1">
+<div id="loginScreen" style="display: flex;">
+  <div class="login-box">
     <button class="theme-toggle-login" onclick="toggleTheme()">🌓</button>
-    <div class="login-logo" bis_skin_checked="1">♠ BridgeMate</div>
-    <div class="login-sub" bis_skin_checked="1">Tournament Control System</div>
-    <div class="role-tabs" bis_skin_checked="1">
+    <div class="login-logo">♠ BridgeMate</div>
+    <div class="login-sub">Tournament Control System</div>
+    <div class="role-tabs">
       <button class="role-tab active" id="rtab-admin" onclick="selRole(&#39;admin&#39;)">⚙️ Admin</button>
       <button class="role-tab" id="rtab-table" onclick="selRole(&#39;table&#39;)">🃏 Table</button>
       <button class="role-tab" id="rtab-screen" onclick="selRole(&#39;screen&#39;)">📺 Screen</button>
     </div>
 
     <!-- QR ile bağlan — Table/Screen seçince görünür -->
-    <div id="qrJoinBox" style="display:none;margin:14px 0;padding:14px;background:var(--surface2);border-radius:10px;border:1px solid var(--border);text-align:center;" bis_skin_checked="1">
-      <div style="font-size:0.82rem;font-weight:600;color:var(--gold);margin-bottom:6px;" bis_skin_checked="1">📱 QR Kod ile Giriş</div>
-      <div style="font-size:0.75rem;color:var(--text2);margin-bottom:12px;" bis_skin_checked="1">
+    <div id="qrJoinBox" style="display:none;margin:14px 0;padding:14px;background:var(--surface2);border-radius:10px;border:1px solid var(--border);text-align:center;">
+      <div style="font-size:0.82rem;font-weight:600;color:var(--gold);margin-bottom:6px;">📱 QR Kod ile Giriş</div>
+      <div style="font-size:0.75rem;color:var(--text2);margin-bottom:12px;">
         Admin QR kodunu telefonunuzun kamera / QR uygulamasıyla okutun.<br>
         Link açılınca masa numaranızı girin.
       </div>
-      <div id="qrScanResult" style="font-size:0.72rem;color:var(--text3);min-height:16px;margin-bottom:8px;" bis_skin_checked="1"></div>
-      <div style="border-top:1px solid var(--border);padding-top:10px;" bis_skin_checked="1">
-        <div style="font-size:0.72rem;color:var(--text3);margin-bottom:6px;" bis_skin_checked="1">Veya Turnuva ID'yi elle girin:</div>
-        <div style="display:flex;gap:6px;" bis_skin_checked="1">
+      <div id="qrScanResult" style="font-size:0.72rem;color:var(--text3);min-height:16px;margin-bottom:8px;"></div>
+      <div style="border-top:1px solid var(--border);padding-top:10px;">
+        <div style="font-size:0.72rem;color:var(--text3);margin-bottom:6px;">Veya Turnuva ID'yi elle girin:</div>
+        <div style="display:flex;gap:6px;">
           <input id="manualTid" placeholder="2026-06-25_1435" style="flex:1;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.82rem;outline:none;" onkeydown="if(event.key===&#39;Enter&#39;)joinByTid()">
           <button class="btn btn-blue btn-sm" onclick="joinByTid()">Bağlan</button>
         </div>
       </div>
     </div>
 
-    <div class="pw-wrap" id="pwWrap" bis_skin_checked="1" style="display: block;">
+    <div class="pw-wrap" id="pwWrap" style="display: block;">
       <input type="password" id="pwInput" placeholder="Password" onkeydown="if(event.key===&#39;Enter&#39;)doLogin()">
     </div>
-    <div class="login-err" id="loginErr" bis_skin_checked="1"></div>
+    <div class="login-err" id="loginErr"></div>
     <button class="btn-primary" onclick="doLogin()">Giris Yap</button>
-    <div style="text-align:center;margin-top:14px;" bis_skin_checked="1">
+    <div style="text-align:center;margin-top:14px;">
       <span style="font-size:0.7rem;color:var(--text3);">BridgeMate v2.1 &nbsp;</span>
       <span style="font-size:0.7rem;color:var(--gold);cursor:pointer;text-decoration:underline;" onclick="showFirebasePanel()">⚡ Firebase Sync Ayarla</span>
     </div>
@@ -343,32 +343,32 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 </div>
 
 <!-- APP -->
-<div id="app" bis_skin_checked="1" style="display: none;">
-  <div class="topbar" bis_skin_checked="1">
-    <div class="topbar-left" bis_skin_checked="1">
-      <div class="topbar-logo" bis_skin_checked="1">♠ BridgeMate</div>
+<div id="app" style="display: none;">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="topbar-logo">♠ BridgeMate</div>
       <span class="topbar-badge" id="topbarRole"></span>
       <span class="topbar-round" id="topbarRound" style="display:none;"></span>
     </div>
-    <div class="topbar-right" bis_skin_checked="1">
-      <div id="fbStatusBadge" style="display:inline-flex;align-items:center;gap:4px;font-size:0.68rem;padding:3px 9px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);cursor:pointer;" onclick="role===&#39;admin&#39;?showQR():showFirebasePanel()" title="Firebase" bis_skin_checked="1">
+    <div class="topbar-right">
+      <div id="fbStatusBadge" style="display:inline-flex;align-items:center;gap:4px;font-size:0.68rem;padding:3px 9px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);cursor:pointer;" onclick="role===&#39;admin&#39;?showQR():showFirebasePanel()" title="Firebase">
         <span id="fbStatusDot" style="width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex-shrink: 0;"></span>
         <span id="fbStatusTxt" style="color:var(--text3);">Canli</span>
       </div>
-      <div id="fbErr" style="display:none;font-size:0.68rem;color:var(--red);padding:2px 8px;background:var(--reddim);border-radius:8px;" bis_skin_checked="1"></div>
+      <div id="fbErr" style="display:none;font-size:0.68rem;color:var(--red);padding:2px 8px;background:var(--reddim);border-radius:8px;"></div>
       <button class="tbtn" onclick="toggleTheme()">🌓</button>
       <button class="tbtn" onclick="doLogout()">Logout</button>
     </div>
   </div>
-  <div id="panelContent" bis_skin_checked="1"></div>
+  <div id="panelContent"></div>
 </div>
 
 <!-- MODAL -->
-<div class="modal-bg" id="modalBg" onclick="if(event.target===this)closeModal()" bis_skin_checked="1">
-  <div class="modal" id="modalBox" bis_skin_checked="1">
+<div class="modal-bg" id="modalBg" onclick="if(event.target===this)closeModal()">
+  <div class="modal" id="modalBox">
     <h3 id="modalTitle"></h3>
-    <div id="modalBody" bis_skin_checked="1"></div>
-    <div class="modal-actions" id="modalActions" bis_skin_checked="1"></div>
+    <div id="modalBody"></div>
+    <div class="modal-actions" id="modalActions"></div>
   </div>
 </div>
 
@@ -2066,12 +2066,12 @@ window.fbDisconnect=function(){
 };
 
 function fbAutoConnectOnSetup(tourneyName){
-  const cfg=getFBConfig();
-  if(!cfg||!_fbDb)return;
   const tid=makeTourneyId(tourneyName);
   setFBTourneyId(tid);
   _fbTourneyId=tid;
-  ['state','pairs','boards','movements','approvals','archives','logs'].forEach(k=>fbSubscribe(k));
+  if(_fbDb){
+    ['state','pairs','boards','movements','approvals','archives','logs'].forEach(k=>fbSubscribe(k));
+  }
 }
 
 let adminTab='setup';
