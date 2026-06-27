@@ -729,8 +729,8 @@ window.selRole=function(r){
   document.getElementById('rtab-'+r)?.classList.add('active');
   document.getElementById('loginErr').textContent='';
   document.getElementById('pwInput').value='';
-  // Only show password field for admin
-  document.getElementById('pwWrap').style.display=(r==='admin')?'block':'none';
+  // Show password field for admin and table, not for screen
+  document.getElementById('pwWrap').style.display=(r==='admin'||r==='table')?'block':'none';
 };
 selRole('admin');
 
@@ -738,7 +738,7 @@ window.doLogin=function(){
   const err=document.getElementById('loginErr');err.textContent='';
   const pw=document.getElementById('pwInput').value;
   if(role==='admin'&&pw!==PASS.admin){err.textContent='❌ Yanlis sifre';return;}
-  // Table and Screen roles: no password required
+  if(role==='table'&&pw!==PASS.table){err.textContent='❌ Yanlis sifre';return;}
   if(role==='admin'){
     const snap=localStorage.getItem('bm_adminSessionSnap');
     const st=DB.get('state');
