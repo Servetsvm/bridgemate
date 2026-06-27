@@ -1089,6 +1089,25 @@ window.adminSaveSetup=function(){
 
   const s=getState();
   setState({...s,name,tableCount,boardsPerRound,totalBoards,movement,scoring,phantom,timerMinutes,roundCount,status:'setup'});
+
+  // Pre-create pairs so names can be saved before Start
+  const existingPairs=getPairs();
+  const newPairs={};
+  if(movement==='howell'){
+    const pairCount=tableCount*2;
+    for(let i=1;i<=pairCount;i++){
+      const key='p'+i;
+      newPairs[key]=existingPairs[key]||{id:key,name:'Pair '+i,dir:'',startTable:0,isPhantom:false};
+    }
+  } else {
+    for(let i=1;i<=tableCount;i++){
+      const nsk='ns_'+i;const ewk='ew_'+i;
+      newPairs[nsk]=existingPairs[nsk]||{id:nsk,name:'NS '+i,dir:'NS',startTable:i,isPhantom:false};
+      newPairs[ewk]=existingPairs[ewk]||{id:ewk,name:'EW '+i,dir:'EW',startTable:i,isPhantom:false};
+    }
+    if(phantom) newPairs['phantom']={id:'phantom',name:'Phantom',dir:'EW',startTable:0,isPhantom:true};
+  }
+  setPairs(newPairs);
   toast('✅ Setup saved');
   adminBuildNamesGrid(tableCount);
 };
@@ -1133,11 +1152,11 @@ window.adminStart=function(){
   if(s.movement==='howell') gen=generateHowell(s.tableCount,s.boardsPerRound,s.totalBoards);
   else gen=generateMitchell(s.tableCount,s.boardsPerRound,s.phantom,s.totalBoards);
 
-  // Apply saved names to generated pairs
+  // Apply saved names to generated pairs (always copy if name exists)
   const savedPairs=getPairs();
   Object.entries(savedPairs).forEach(([key,p])=>{
-    if(gen.pairs[key]&&p.name&&!p.name.match(/^(NS|EW)\s*\d+$/)&&!p.name.match(/^Pair\s*\d+$/)){
-      gen.pairs[key].name=p.name;
+    if(gen.pairs[key]&&p.name&&p.name.trim()){
+      gen.pairs[key].name=p.name.trim();
     }
   });
 
@@ -1338,6 +1357,21 @@ function renderMovementTab(){
 function renderDirectorTab(){
   const s=getState();
   const isRunning=s.status==='running';
+  // Build names grid after render
+  setTimeout(()=>{
+    const grid=document.getElementById('dirNamesGrid');
+    if(!grid) return;
+    const pairs=getPairs();
+    let html='';
+    Object.values(pairs).filter(p=>!p.isPhantom).forEach(p=>{
+      const isNS=p.dir==='NS'||p.id.startsWith('ns_');
+      html+=`<div class="pn-item">
+        <span class="pn-badge ${isNS?'pn-badge-ns':'pn-badge-ew'}">${p.id.replace('ns_','NS').replace('ew_','EW').replace('p','P')}</span>
+        <input class="pn-input" id="dirpname_${p.id}" value="${p.name||''}" placeholder="${p.name||p.id}">
+      </div>`;
+    });
+    grid.innerHTML=html||'<div style="color:var(--text3);font-size:0.8rem;">No pairs yet — start tournament first</div>';
+  },50);
   return`
   <div class="card">
     <div class="card-title"><span>📢</span> Broadcast Message</div>
@@ -1371,6 +1405,13 @@ function renderDirectorTab(){
     </div>
     <div class="field"><label>Board</label><input id="dirBoard" type="number" min="1" max="${s.totalBoards||24}" placeholder="1"></div>
     <button class="btn btn-orange btn-full" onclick="adminEditBoard()">📝 Load Board</button>
+  </div>
+
+  <div class="card">
+    <div class="card-title"><span>👥</span> Edit Pair Names</div>
+    <div style="font-size:0.78rem;color:var(--text2);margin-bottom:8px;">Correct any pair name during the tournament</div>
+    <div class="player-name-grid" id="dirNamesGrid" style="margin-bottom:10px;"></div>
+    <button class="btn btn-gold btn-full" onclick="dirSaveNames()">💾 Save Names</button>
   </div>
 
   <div class="card">
@@ -1544,6 +1585,25 @@ window.adminDoSubstitute=function(){
   addLog('ok','Player substituted',pairId+' → '+newName);
   toast('✅ '+pairId+' replaced with: '+newName);
   closeModal();
+};
+
+window.dirSaveNames=function(){
+  const pairs=getPairs();
+  let changed=0;
+  Object.keys(pairs).forEach(key=>{
+    const el=document.getElementById('dirpname_'+key);
+    if(el&&el.value.trim()&&el.value.trim()!==pairs[key].name){
+      pairs[key].name=el.value.trim();
+      changed++;
+    }
+  });
+  if(changed>0){
+    setPairs(pairs);
+    toast('✅ '+changed+' name(s) updated');
+    addLog('ok','Names updated by director',changed+' pairs changed');
+  } else {
+    toast('No changes');
+  }
 };
 
 window.adminSavePass=function(){
@@ -2312,7 +2372,12 @@ window.bmSubmitBoard=function(tableNo,boardNo){
     if(!bmEntry.declarer){toast('⚠️ Select declarer (N/S/E/W)');return;}
     if(bmEntry.result===null){bmEntry.result=0;}// default: made exactly
     contract=bmEntry.level+bmEntry.suit+' '+bmEntry.declarer+(bmEntry.doubled?bmEntry.doubled:'')+(bmEntry.result===0?' =':(bmEntry.result>0?' +':' ')+bmEntry.result);
-    const rawScore=calcScore(bmEntry.level,bmEntry.suit,bmEntry.declarer,bmEntry.result,vuln,bmEntry.doubled||'');
+    let rawScore;
+    try{
+      rawScore=calcScore(bmEntry.level,bmEntry.suit,bmEntry.declarer,bmEntry.result,vuln,bmEntry.doubled||'');
+    }catch(e){
+      toast('⚠️ Score calculation error: '+e.message);return;
+    }
     const isNS=bmEntry.declarer==='N'||bmEntry.declarer==='S';
     nsScore=isNS?rawScore:-rawScore;
     ewScore=-nsScore;
