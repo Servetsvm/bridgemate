@@ -2178,8 +2178,7 @@ function _renderBoardForm(tableNo,boardNo){
 
       <div style="display:flex;gap:8px;margin-top:10px;">
         <button class="btn btn-ghost btn-full" onclick="renderTableDetail(${tableNo})">← Back</button>
-        <button class="btn btn-gold btn-full" onclick="bmSubmitBoard(${tableNo},${boardNo})" id="submitBtn"
-          ${(bmEntry.level&&bmEntry.suit&&bmEntry.declarer&&bmEntry.result!==null)||bmEntry.level==='PASS'?'':'disabled'}>
+        <button class="btn btn-gold btn-full" onclick="bmSubmitBoard(${tableNo},${boardNo})" id="submitBtn">
           ✅ Submit
         </button>
       </div>
@@ -2189,7 +2188,7 @@ function _renderBoardForm(tableNo,boardNo){
 }
 
 // Entry setters
-window.bmSetLevel=function(t,b,l){bmEntry.level=l;bmEntry.result=0;_renderBoardForm(t,b);};
+window.bmSetLevel=function(t,b,l){bmEntry.level=l;if(bmEntry.result===null)bmEntry.result=0;_renderBoardForm(t,b);};
 window.bmSetSuit2=function(t,b,s){bmEntry.suit=s;_renderBoardForm(t,b);};
 window.bmSetDoubled=function(t,b,d){bmEntry.doubled=d;_renderBoardForm(t,b);};
 window.bmSetDeclarer=function(t,b,d){bmEntry.declarer=d;_renderBoardForm(t,b);};
@@ -2286,7 +2285,10 @@ window.bmSubmitBoard=function(tableNo,boardNo){
   if(bmEntry.level==='PASS'){
     contract='PASS';nsScore=0;ewScore=0;
   } else {
-    if(!bmEntry.level||!bmEntry.suit||!bmEntry.declarer||bmEntry.result===null){toast('Complete the entry first');return;}
+    if(!bmEntry.level){toast('⚠️ Select level (1-7)');return;}
+    if(!bmEntry.suit){toast('⚠️ Select suit (♣♦♥♠ NT)');return;}
+    if(!bmEntry.declarer){toast('⚠️ Select declarer (N/S/E/W)');return;}
+    if(bmEntry.result===null){bmEntry.result=0;}// default: made exactly
     contract=bmEntry.level+bmEntry.suit+' '+bmEntry.declarer+(bmEntry.doubled?bmEntry.doubled:'')+(bmEntry.result===0?' =':(bmEntry.result>0?' +':' ')+bmEntry.result);
     const rawScore=calcScore(bmEntry.level,bmEntry.suit,bmEntry.declarer,bmEntry.result,vuln,bmEntry.doubled||'');
     const isNS=bmEntry.declarer==='N'||bmEntry.declarer==='S';
