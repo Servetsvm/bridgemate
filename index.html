@@ -1028,6 +1028,7 @@ function renderSetupSummary(s){
       <button class="btn btn-blue" onclick="adminAdvanceRound()">⏭ Next Round</button>
       <button class="btn btn-red" onclick="adminFinish()">🏁 Finish</button>
       <button class="btn btn-ghost" onclick="adminExport()">💾 Backup</button>
+      <button class="btn btn-red" onclick="adminReset()" style="background:var(--reddim);color:var(--red);border:1px solid rgba(224,90,78,0.3);">🗑 Reset</button>
     </div>
   </div>`;
 }
@@ -1167,6 +1168,27 @@ window.adminAdvanceRound=function(){
   renderAdminTab();
   // Start round timer if set
   if(s.timerMinutes>0) startRoundTimer(s.timerMinutes);
+};
+
+window.adminReset=function(){
+  if(!confirm('⚠️ RESET tournament?\nAll scores and data will be deleted!')) return;
+  if(!confirm('Are you sure? This cannot be undone.')) return;
+  // Clear Firebase
+  if(_fbDb&&_fbTourneyId){
+    _fbDb.ref('tournaments/'+_fbTourneyId).remove().catch(()=>{});
+  }
+  // Clear localStorage
+  ['state','pairs','boards','movements','approvals','messages','timers','logs'].forEach(k=>{
+    localStorage.removeItem('bm_'+k);
+    delete _fbCache[k];
+  });
+  localStorage.removeItem('bm_fbTourneyId');
+  _fbTourneyId=null;
+  fbUnsubscribeAll();
+  addLog('warn','Tournament reset','All data cleared');
+  toast('🗑 Reset complete');
+  adminTab='setup';
+  renderAdminPanel();
 };
 
 window.adminFinish=function(){
