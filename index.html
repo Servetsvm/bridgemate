@@ -466,7 +466,7 @@ function fbSubscribe(key){
       localStorage.setItem('bm_'+key,JSON.stringify(val));
     }
     // Trigger UI refresh if relevant
-    if(key==='state'||key==='boards'||key==='approvals'){
+    if(key==='state'||key==='boards'||key==='approvals'||key==='pairs'||key==='movements'){
       if(role==='screen')renderScreenPanel();
       else if(role==='table'&&bmTableNo){
         // Only refresh if we're in play state (not in form)
@@ -1050,8 +1050,10 @@ function renderTableDetail(tableNo){
   const movements=getMovements();const pairs=getPairs();const boards=getBoards();
   const mk=s.currentRound+'_'+tableNo;
   const m=movements[mk]||{};
-  const nsPair=pairs[m.ns]||{name:'—',id:m.ns};
-  const ewPair=pairs[m.ew]||{name:'—',id:m.ew};
+  const nsPair=pairs[m.ns]||{name:'',id:m.ns};
+  const ewPair=pairs[m.ew]||{name:'',id:m.ew};
+  const nsName=nsPair.name&&nsPair.name.trim()?nsPair.name:'NS '+(m.ns||'').replace(/[^0-9]/g,'');
+  const ewName=ewPair.name&&ewPair.name.trim()?ewPair.name:'EW '+(m.ew||'').replace(/[^0-9]/g,'');
   const isPhantom=nsPair.isPhantom||ewPair.isPhantom;
 
   const boardList=[];
@@ -1117,8 +1119,8 @@ function renderTableDetail(tableNo){
       </div>
       <div class="bm-lcd">
         <div class="bm-lcd-row inv">${lcdLine1.slice(0,20).padEnd(20)}</div>
-        <div class="bm-lcd-row">NS: ${nsPair.name.slice(0,16).padEnd(16)}</div>
-        <div class="bm-lcd-row">EW: ${ewPair.name.slice(0,16).padEnd(16)}</div>
+        <div class="bm-lcd-row">NS: ${nsName.slice(0,16).padEnd(16)}</div>
+        <div class="bm-lcd-row">EW: ${ewName.slice(0,16).padEnd(16)}</div>
         <div class="bm-lcd-row">${s.scoring==='IMP'?'IMP':'MP'} SCORING          </div>
       </div>
       <div id="boardsSection">
