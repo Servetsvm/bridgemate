@@ -939,21 +939,48 @@ window.bmSelectTable=function(){
   localStorage.setItem('bm_tableSession',JSON.stringify({
     tableNo:n, side:bmSide, tid:_fbTourneyId, ts:Date.now()
   }));
-  const movements=getMovements();
-  const pairs=getPairs();
-  const mk=s.currentRound+'_'+n;
-  const m=movements[mk]||{};
-  const pairKey=bmSide==='ns'?m.ns:m.ew;
-  const pair=pairs[pairKey]||{};
-  const nm=(pair.name||'').trim();
-  const isDefault=!nm||/^(Pair\s+\d+|NS\s+\d+|EW\s+\d+|P\d+)$/i.test(nm);
-  const hasRealName=!isDefault;
-  if(hasRealName){
-    // Names already loaded from admin — show confirmation screen
-    bmShowNameConfirm(n,pairKey,pair.name);
+
+  function proceed(pairs,movements){
+    const mk=s.currentRound+'_'+n;
+    const m=movements[mk]||{};
+    const pairKey=bmSide==='ns'?m.ns:m.ew;
+    const pair=pairs[pairKey]||{};
+    const nm=(pair.name||'').trim();
+    const isDefault=!nm||/^(Pair\s*\d+|NS\s*\d+|EW\s*\d+|P\d+)$/i.test(nm);
+    if(!isDefault){
+      bmShowNameConfirm(n,pairKey,pair.name);
+    } else {
+      bmShowNameEntry(n,pairKey,'');
+    }
+  }
+
+  // Try to fetch fresh from Firebase first
+  if(_fbOnlineMode&&_fbDb&&_fbTourneyId){
+    const base='tournaments/'+_fbTourneyId;
+    const pairsRef=_fbDb.ref(base+'/pairs');
+    const movRef=_fbDb.ref(base+'/movements');
+    // Show loading indicator
+    document.getElementById('panelContent').innerHTML=`
+      <div class="waiting-screen" style="padding:60px 20px;">
+        <div class="waiting-icon">⏳</div>
+        <div class="waiting-title">Loading...</div>
+      </div>`;
+    Promise.all([
+      pairsRef.once('value').then(s=>s.val()||{}),
+      movRef.once('value').then(s=>s.val()||{})
+    ]).then(([pairs,movements])=>{
+      // Update cache
+      _fbCache['pairs']=pairs;
+      _fbCache['movements']=movements;
+      localStorage.setItem('bm_pairs',JSON.stringify(pairs));
+      localStorage.setItem('bm_movements',JSON.stringify(movements));
+      proceed(pairs,movements);
+    }).catch(()=>{
+      // Fallback to cache
+      proceed(getPairs(),getMovements());
+    });
   } else {
-    // No name yet — show entry form
-    bmShowNameEntry(n,pairKey,'');
+    proceed(getPairs(),getMovements());
   }
 };
 
@@ -1047,14 +1074,16 @@ window.bmSaveNameAndGo=function(tableNo,pairKey){
 
 function renderTableDetail(tableNo){
   const s=getState();
-  const movements=getMovements();const pairs=getPairs();const boards=getBoards();
+  const movements=getMovements();const boards=getBoards();
   const mk=s.currentRound+'_'+tableNo;
   const m=movements[mk]||{};
-  const nsPair=pairs[m.ns]||{name:'',id:m.ns};
-  const ewPair=pairs[m.ew]||{name:'',id:m.ew};
-  const nsName=nsPair.name&&nsPair.name.trim()?nsPair.name:'NS '+(m.ns||'').replace(/[^0-9]/g,'');
-  const ewName=ewPair.name&&ewPair.name.trim()?ewPair.name:'EW '+(m.ew||'').replace(/[^0-9]/g,'');
-  const isPhantom=nsPair.isPhantom||ewPair.isPhantom;
+
+  function doRender(pairs){
+    const nsPair=pairs[m.ns]||{name:'',id:m.ns};
+    const ewPair=pairs[m.ew]||{name:'',id:m.ew};
+    const nsName=nsPair.name&&nsPair.name.trim()?nsPair.name:'NS '+(m.ns||'').replace(/[^0-9]/g,'');
+    const ewName=ewPair.name&&ewPair.name.trim()?ewPair.name:'EW '+(m.ew||'').replace(/[^0-9]/g,'');
+    const isPhantom=nsPair.isPhantom||ewPair.isPhantom;
 
   const boardList=[];
   for(let b=m.boardStart||1;b<=(m.boardEnd||3);b++){
@@ -1137,6 +1166,19 @@ function renderTableDetail(tableNo){
   if(bmPollInterval)clearInterval(bmPollInterval);
   if(!_fbOnlineMode){
     bmPollInterval=setInterval(()=>bmPollApprovals(tableNo),1500);
+  }
+  } // end doRender
+
+  // Fetch pairs fresh from Firebase, then render
+  if(_fbOnlineMode&&_fbDb&&_fbTourneyId){
+    _fbDb.ref('tournaments/'+_fbTourneyId+'/pairs').once('value').then(snap=>{
+      const fresh=snap.val()||{};
+      _fbCache['pairs']=fresh;
+      localStorage.setItem('bm_pairs',JSON.stringify(fresh));
+      doRender(fresh);
+    }).catch(()=>doRender(getPairs()));
+  } else {
+    doRender(getPairs());
   }
 }
 
