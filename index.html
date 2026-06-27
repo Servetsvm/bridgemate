@@ -920,7 +920,10 @@ function renderAdminPanel(){
 window.switchAdminTab=function(tab){
   adminTab=tab;
   document.querySelectorAll('.admin-tab').forEach(b=>b.classList.remove('active'));
-  document.querySelectorAll('.admin-tab').forEach(b=>{if(b.textContent.toLowerCase().includes(tab.slice(0,3)))b.classList.add('active');});
+  const tabMap={'setup':'⚙️ Setup','overview':'📊 Overview','movement':'🗺 Movement','director':'🎯 Director','results':'🏆 Results','archive':'📁 Archive','log':'📋 Log'};
+  document.querySelectorAll('.admin-tab').forEach(b=>{
+    if(b.textContent.trim()===tabMap[tab]) b.classList.add('active');
+  });
   renderAdminTab();
 };
 
@@ -1170,6 +1173,7 @@ window.adminStart=function(){
   toast('🚀 Tournament started!');
   playSound('ok');
   adminTab='overview';
+  refreshTopbar();
   renderAdminPanel();
 };
 
@@ -1201,6 +1205,7 @@ window.adminReset=function(){
   localStorage.removeItem('bm_fbTourneyId');
   _fbTourneyId=null;
   fbUnsubscribeAll();
+  clearTableSession();
   addLog('warn','Tournament reset','All data cleared');
   toast('🗑 Reset complete');
   adminTab='setup';
@@ -1275,7 +1280,7 @@ function renderOverviewTab(){
       <div style="font-size:0.7rem;color:var(--text3);">Boards ${m.boardStart||'?'}–${m.boardEnd||'?'}</div>
       <div style="display:flex;gap:4px;margin-top:8px;">
         <button class="btn btn-ghost btn-sm" onclick="adminViewTable(${t})">Details</button>
-        <button class="btn btn-orange btn-sm" onclick="adminDirectorTable(${t})">✏️ Edit</button>
+        <button class="btn btn-orange btn-sm" onclick="switchAdminTab('director');setTimeout(()=>adminDirectorTable(${t}),100)">✏️ Edit</button>
       </div>
     </div>`;
   }).join('');
@@ -1284,7 +1289,6 @@ function renderOverviewTab(){
   const totalExpected=s.tableCount*s.boardsPerRound;
 
   return`
-  ${renderSetupSummary(s)}
   <div class="stats-row" style="margin-bottom:12px;">
     <div class="stat-box"><div class="sv">${s.currentRound}/${s.roundCount}</div><div class="sl">Round</div></div>
     <div class="stat-box"><div class="sv">${doneBoards}/${totalExpected}</div><div class="sl">Boards Done</div></div>
@@ -1294,6 +1298,26 @@ function renderOverviewTab(){
   <div id="roundTimerDisplay"></div>
   <div class="table-grid">${tableCards}</div>`;
 }
+
+window.adminDirectorTable=function(t){
+  const s=getState();
+  // Switch to director tab first, then pre-fill
+  adminTab='director';
+  renderAdminPanel();
+  setTimeout(()=>{
+    const tEl=document.getElementById('dirTable');
+    const rEl=document.getElementById('dirRound');
+    if(tEl) tEl.value=t;
+    if(rEl) rEl.value=s.currentRound;
+    // Auto-load the first board
+    const m=getMovements()[s.currentRound+'_'+t]||{};
+    const bEl=document.getElementById('dirBoard');
+    if(bEl&&m.boardStart) bEl.value=m.boardStart;
+    // Scroll to Edit Board Score card
+    const editCard=document.getElementById('dirEditCard');
+    if(editCard) editCard.scrollIntoView({behavior:'smooth',block:'start'});
+  },80);
+};
 
 window.adminViewTable=function(t){
   const s=getState();const movements=getMovements();const boards=getBoards();const pairs=getPairs();
@@ -1393,7 +1417,7 @@ function renderDirectorTab(){
     </div>
   </div>
 
-  <div class="card">
+  <div class="card" id="dirEditCard">
     <div class="card-title"><span>✏️</span> Edit Board Score</div>
     <div style="font-size:0.82rem;color:var(--text2);margin-bottom:10px;">Override or correct any board result</div>
     <div class="field-row">
@@ -1901,11 +1925,8 @@ window.bmSelectTable=async function(n){
   bmTableNo=n;
   saveTableSession(n,bmSide);
 
-  if(!isDefault){
-    bmShowNameConfirm(n,pairKey,pair.name,m);
-  } else {
-    bmShowNameEntry(n,pairKey,'',m);
-  }
+  // Always show confirm screen - name entry is optional
+  bmShowNameConfirm(n,pairKey,pair.name,m);
 };
 
 window.bmShowNameConfirm=function(tableNo,pairKey,loadedName,m){
@@ -1988,15 +2009,14 @@ window.bmShowNameEntry=function(tableNo,pairKey,prefill,m){
 window.bmSaveNameAndGo=function(tableNo,pairKey){
   const p1=(document.getElementById('nameP1')?.value||'').trim();
   const p2=(document.getElementById('nameP2')?.value||'').trim();
-  if(!p1&&!p2){toast('Enter at least one name');return;}
-  const name=p1&&p2?p1+' & '+p2:p1||p2;
   const pairs=getPairs();
-  if(pairs[pairKey]){
+  if((p1||p2)&&pairs[pairKey]){
+    const name=p1&&p2?p1+' & '+p2:p1||p2;
     pairs[pairKey].name=name;
     setPairs(pairs);
+    addLog('ok','Names set',pairKey+' = '+name);
+    toast('✅ '+name);
   }
-  addLog('ok','Names set',pairKey+' = '+name);
-  toast('✅ '+name);
   bmLockTable(tableNo,pairKey);
 };
 
@@ -2070,58 +2090,49 @@ function _renderTableDetail(tableNo){
     }
   }
 
-  // LCD content
-  const lcdLine1=`TABLE ${String(tableNo).padStart(2,' ')}  RND ${String(s.currentRound).padStart(2,' ')}  ${s.scoring.padStart(3,' ')} `;
+  // If all done → show round-over screen
+  if(allDone){
+    _renderRoundOverScreen(tableNo,s,movements,pairs,boardList);
+    return;
+  }
 
+  // Phantom: show board list with average buttons
+  if(isPhantom){
+    _renderPhantomBoardList(tableNo,s,m,boardList);
+    return;
+  }
+
+  // Find next pending board and auto-open it
+  const nextBoard=boardList.find(x=>x.bd?.status==='pending');
+  if(nextBoard){
+    // Show waiting for approval of pending board
+    bmShowApprovalWait(tableNo,nextBoard.b,nextBoard.bd.contract,nextBoard.bd.nsScore);
+    return;
+  }
+  const openBoard=boardList.find(x=>!x.bd||x.bd.status==='open');
+  if(openBoard){
+    bmOpenBoard(tableNo,openBoard.b);
+    return;
+  }
+
+  // Fallback: show board list (should rarely reach here)
+  const lcdLine1=`TABLE ${String(tableNo).padStart(2,' ')}  RND ${String(s.currentRound).padStart(2,' ')}  ${s.scoring.padStart(3,' ')} `;
   let boardsHtml=boardList.map(({b,key,bd,vuln})=>{
     const isDone=bd?.status==='done';
     const isPending=bd?.status==='pending';
     const contract=isDone||isPending?bd.contract:null;
     const score=isDone&&typeof bd.nsScore==='number'?(bd.nsScore>0?'+':'')+bd.nsScore:'';
     const scoreColor=bd?.nsScore>0?'var(--green)':bd?.nsScore<0?'var(--red)':'var(--text2)';
-    return`<div class="board-item ${isDone?'done':isPending?'pending':'active'}" 
+    return`<div class="board-item ${isDone?'done':isPending?'pending':'active'}"
          onclick="${!isDone&&!isPending?`bmOpenBoard(${tableNo},${b})`:''}">
       <div class="bi-num">Board ${b} <span class="vul-badge vul-${vuln.toLowerCase().replace(' ','')}">${vuln}</span></div>
       <div class="bi-contract">${contract||''}</div>
       ${isDone?`<div class="bi-score" style="color:${scoreColor};">${score}</div>`:''}
-      ${isPending?`<div style="color:var(--gold);font-size:0.72rem;">⏳ Approval</div>`:''}
-      ${!isDone&&!isPending?`<div style="color:var(--text3);font-size:0.72rem;">→ Enter</div>`:''}
+      ${isPending?`<div style="color:var(--gold);font-size:0.72rem;">⏳ Onay bekleniyor</div>`:''}
+      ${!isDone&&!isPending?`<div style="color:var(--text3);font-size:0.72rem;">→ Gir</div>`:''}
       ${bd?.adjusted?`<span class="adj-badge">ADJ</span>`:''}
     </div>`;
   }).join('');
-
-  let statusHtml='';
-  if(allDone){
-    if(s.currentRound<s.roundCount){
-      const nextM=movements[(s.currentRound+1)+'_'+tableNo]||{};
-      const nextNS=pairs[nextM.ns]||{name:'?'};
-      const nextEW=pairs[nextM.ew]||{name:'?'};
-      statusHtml=`
-      <div class="round-over-screen">
-        <div class="ro-badge">🎉</div>
-        <div class="ro-title">Round ${s.currentRound} Complete!</div>
-        <div class="ro-sub">All ${boardList.length} boards entered</div>
-        <div class="next-round-card">
-          <div class="nr-title">Next Round ${s.currentRound+1}</div>
-          <div class="ro-move-card">
-            <div class="ro-move-label">NS stays · EW moves</div>
-            <div class="ro-move-main">NS: ${nextNS.name}</div>
-            <div class="ro-move-sub">EW: ${nextEW.name}</div>
-            <div class="ro-move-sub">Boards ${nextM.boardStart||'?'}–${nextM.boardEnd||'?'}</div>
-          </div>
-        </div>
-        <button class="btn btn-ghost btn-full" onclick="bmViewScoreboard()">📊 View Scoreboard</button>
-      </div>`;
-    } else {
-      statusHtml=`
-      <div class="round-over-screen">
-        <div class="ro-badge">🏁</div>
-        <div class="ro-title">Tournament Complete!</div>
-        <div class="ro-sub">All rounds finished</div>
-        <button class="btn btn-gold btn-full" onclick="bmViewScoreboard()">🏆 View Results</button>
-      </div>`;
-    }
-  }
 
   document.getElementById('panelContent').innerHTML=`
   <div class="bm-device">
@@ -2129,19 +2140,200 @@ function _renderTableDetail(tableNo){
       <div class="bm-lcd-row inv">${lcdLine1}</div>
       <div class="bm-lcd-row">N${nsNum.padEnd(2,' ')}:${nsName.slice(0,17).padEnd(17)}</div>
       <div class="bm-lcd-row">E${ewNum.padEnd(2,' ')}:${ewName.slice(0,17).padEnd(17)}</div>
-      <div class="bm-lcd-row">BOARDS ${m.boardStart||'?'} TO ${m.boardEnd||'?'} ${allDone?'DONE   ':'       '}</div>
+      <div class="bm-lcd-row">BOARDS ${m.boardStart||'?'} TO ${m.boardEnd||'?'}         </div>
     </div>
-    ${isPhantom?`<div class="director-bar">👻 Phantom pair — no entry needed, award Average</div>`:''}
-    <div id="broadcastBar"></div>
+    ${isPhantom?`<div class="director-bar">👻 Phantom pair — Average awarded</div>`:''}
     <div id="boardsList">${boardsHtml}</div>
-    ${statusHtml}
     <div style="display:flex;gap:6px;margin-top:10px;">
-      <button class="btn btn-ghost btn-sm" onclick="bmTableNo=null;bmEntry={};renderTablePanel()">← Tables</button>
-      <button class="btn btn-ghost btn-sm" onclick="bmViewScoreboard()">📊 Board Comparison</button>
+      <button class="btn btn-ghost btn-sm" onclick="bmTableNo=null;bmEntry={};renderTablePanel()">← Masalar</button>
     </div>
   </div>`;
   checkBroadcast();
 }
+
+// ── PHANTOM BOARD LIST ──
+function _renderPhantomBoardList(tableNo,s,m,boardList){
+  const nsNum=(m.ns||'').replace(/[^0-9]/g,'');
+  const ewNum=(m.ew||'').replace(/[^0-9]/g,'');
+  const boards=getBoards();
+  const boardsHtml=boardList.map(({b,bd,vuln})=>{
+    const isDone=bd?.status==='done';
+    return`<div class="board-item ${isDone?'done':'active'}">
+      <div class="bi-num">Board ${b} <span class="vul-badge vul-${vuln.toLowerCase().replace(' ','')}">${vuln}</span></div>
+      <div class="bi-contract">${isDone?bd.contract:'—'}</div>
+      ${isDone
+        ?`<span class="adj-badge">AVG</span>`
+        :`<button class="btn btn-ghost btn-sm" onclick="bmApplyAdj(${tableNo},${b},50,'Average')">Average</button>`}
+    </div>`;
+  }).join('');
+
+  document.getElementById('panelContent').innerHTML=`
+  <div class="bm-device">
+    <div class="bm-lcd">
+      <div class="bm-lcd-row inv">TABLE ${String(tableNo).padStart(2,' ')}  RND ${String(s.currentRound).padStart(2,' ')}  PHNT </div>
+      <div class="bm-lcd-row">N${nsNum.padEnd(2,' ')}:PHANTOM PAIR         </div>
+      <div class="bm-lcd-row">E${ewNum.padEnd(2,' ')}:                     </div>
+      <div class="bm-lcd-row dim">AVERAGE AWARDED       </div>
+    </div>
+    <div class="director-bar">👻 Phantom pair — Average verin</div>
+    <div>${boardsHtml}</div>
+    <div style="margin-top:10px;">
+      <button class="btn btn-ghost btn-sm" onclick="bmTableNo=null;renderTablePanel()">← Masalar</button>
+    </div>
+  </div>`;
+}
+
+// ── ROUND OVER SCREEN ──
+function _renderRoundOverScreen(tableNo,s,movements,pairs,boardList){
+  const isLastRound=s.currentRound>=s.roundCount;
+
+  if(isLastRound){
+    document.getElementById('panelContent').innerHTML=`
+    <div class="bm-device">
+      <div class="bm-lcd">
+        <div class="bm-lcd-row inv">TOURNAMENT COMPLETE   </div>
+        <div class="bm-lcd-row">TUM TURLER TAMAMLANDI </div>
+        <div class="bm-lcd-row">SONUCLARI GORUNTULE   </div>
+        <div class="bm-lcd-row dim">Tesekkurler!          </div>
+      </div>
+      <div class="round-over-screen">
+        <div class="ro-badge">🏁</div>
+        <div class="ro-title">Turnuva Tamamlandı!</div>
+        <div class="ro-sub">Tüm turlar oynandı</div>
+        <button class="btn btn-gold btn-full" onclick="bmViewScoreboard()" style="margin-top:12px;">🏆 Sonuçları Gör</button>
+      </div>
+    </div>`;
+    return;
+  }
+
+  // Show movement info for next round
+  const nextRound=s.currentRound+1;
+  const nextM=movements[nextRound+'_'+tableNo]||{};
+  const nextNS=pairs[nextM.ns]||{name:'?'};
+  const nextEW=pairs[nextM.ew]||{name:'?'};
+  const myM=movements[s.currentRound+'_'+tableNo]||{};
+  const myNS=pairs[myM.ns]||{name:'?'};
+  const myEW=pairs[myM.ew]||{name:'?'};
+
+  // Determine where I go next round
+  let myNextTable=tableNo;
+  let myNextRole='';
+  for(let t=1;t<=s.tableCount;t++){
+    const nm=movements[nextRound+'_'+t]||{};
+    if(bmSide==='ns'&&nm.ns===myM.ns){myNextTable=t;myNextRole='NS';break;}
+    if(bmSide==='ew'&&nm.ew===myM.ew){myNextTable=t;myNextRole='EW';break;}
+  }
+
+  const stayOrMove=myNextTable===tableNo?'Bu masada kalıyorsunuz':'<b>Masa '+myNextTable+"'e gidiniz</b>";
+
+  document.getElementById('panelContent').innerHTML=`
+  <div class="bm-device">
+    <div class="bm-lcd">
+      <div class="bm-lcd-row inv">TUR ${String(s.currentRound).padStart(2,' ')} BITTI!            </div>
+      <div class="bm-lcd-row">TUM BOARD TAMAMLANDI  </div>
+      <div class="bm-lcd-row">SONRAKI: MASA ${String(myNextTable).padStart(2,' ')}         </div>
+      <div class="bm-lcd-row blink">ADMIN ONAYINI BEKLE   </div>
+    </div>
+    <div class="round-over-screen">
+      <div class="ro-badge">🎉</div>
+      <div class="ro-title">Tur ${s.currentRound} Tamamlandı!</div>
+      <div class="ro-sub">Tüm ${boardList.length} board girildi</div>
+
+      <div class="ro-move-card" style="text-align:center;margin:12px 0;">
+        <div class="ro-move-label">Hareketi</div>
+        <div class="ro-move-main" style="font-size:1.1rem;">${stayOrMove}</div>
+        <div class="ro-move-sub" style="margin-top:4px;">${myNextRole||bmSide.toUpperCase()} olarak · Boards ${nextM.boardStart||'?'}–${nextM.boardEnd||'?'}</div>
+      </div>
+
+      <button class="btn btn-gold btn-full" id="btnMoveOk" onclick="bmRoundMoveOK(${tableNo},${nextRound},${myNextTable})" style="margin-bottom:8px;">
+        ✅ Tamam — Anladım
+      </button>
+      <button class="btn btn-ghost btn-full btn-sm" onclick="bmViewScoreboard()">📊 Skor Tablosu</button>
+    </div>
+  </div>`;
+}
+
+window.bmRoundMoveOK=function(oldTable,nextRound,nextTable){
+  const s=getState();
+  // Show waiting for admin to advance round
+  document.getElementById('panelContent').innerHTML=`
+  <div class="bm-device">
+    <div class="bm-lcd">
+      <div class="bm-lcd-row inv">TUR ${String(nextRound).padStart(2,' ')} HAZIR              </div>
+      <div class="bm-lcd-row">MASA ${String(nextTable).padStart(2,' ')} BEKLIYORSUNUZ     </div>
+      <div class="bm-lcd-row blink">ADMIN BASLAMAYI BEKLE </div>
+      <div class="bm-lcd-row dim">                      </div>
+    </div>
+    <div class="waiting-screen">
+      <div class="waiting-icon" style="font-size:2.5rem;animation:pulse 2s infinite;">⏳</div>
+      <div class="waiting-title">Tur ${nextRound} Bekleniyor</div>
+      <div class="waiting-sub">Admin turu başlatana kadar bekleyin</div>
+      <div style="margin-top:16px;font-size:0.78rem;color:var(--text3);">Masa ${nextTable} · ${bmSide.toUpperCase()}</div>
+    </div>
+  </div>`;
+
+  // Poll for admin to advance round
+  if(bmPollInterval) clearInterval(bmPollInterval);
+  let polls=0;
+  bmPollInterval=setInterval(()=>{
+    const cs=getState();
+    if(cs.currentRound>=nextRound){
+      clearInterval(bmPollInterval);bmPollInterval=null;
+      bmTableNo=nextTable;
+      saveTableSession(nextTable,bmSide);
+      playSound('ok');
+      // Show new opponents before starting
+      bmShowNewOpponents(nextTable,nextRound);
+    }
+    polls++;
+    if(polls>600){clearInterval(bmPollInterval);bmPollInterval=null;}
+  },2000);
+};
+
+window.bmShowNewOpponents=function(tableNo,round){
+  const s=getState();
+  const movements=getMovements();
+  const pairs=getPairs();
+  const m=movements[round+'_'+tableNo]||{};
+  const nsNum=(m.ns||'').replace(/[^0-9]/g,'');
+  const ewNum=(m.ew||'').replace(/[^0-9]/g,'');
+  const nsPair=pairs[m.ns]||{name:'NS '+nsNum};
+  const ewPair=pairs[m.ew]||{name:'EW '+ewNum};
+
+  document.getElementById('panelContent').innerHTML=`
+  <div class="bm-device">
+    <div class="bm-lcd">
+      <div class="bm-lcd-row inv">TUR ${String(round).padStart(2,' ')} BASLADI!           </div>
+      <div class="bm-lcd-row">MASA ${String(tableNo).padStart(2,' ')}                   </div>
+      <div class="bm-lcd-row">N${nsNum.padEnd(2,' ')}:${nsPair.name.slice(0,17).padEnd(17)}</div>
+      <div class="bm-lcd-row">E${ewNum.padEnd(2,' ')}:${ewPair.name.slice(0,17).padEnd(17)}</div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span>🎯</span> Tur ${round} — Masa ${tableNo}</div>
+      <div class="pair-confirm">
+        <div class="pair-box pair-box-ns">
+          <div class="pb-label">NS</div>
+          <div class="pb-num">${nsNum}</div>
+          <div class="pb-name">${nsPair.name}</div>
+        </div>
+        <div class="pair-box pair-box-ew">
+          <div class="pb-label">EW</div>
+          <div class="pb-num">${ewNum}</div>
+          <div class="pb-name">${ewPair.name}</div>
+        </div>
+      </div>
+      <div style="font-size:0.78rem;color:var(--text2);text-align:center;margin-bottom:14px;">
+        Boards <b>${m.boardStart||'?'}</b> – <b>${m.boardEnd||'?'}</b> · ${s.scoring}
+      </div>
+      <div style="font-size:0.75rem;color:var(--text3);text-align:center;margin-bottom:12px;">
+        Rakipler doğru mu? Onaylayın ve oynamaya başlayın.
+      </div>
+      <button class="btn btn-green btn-full" onclick="bmLockTable(${tableNo},'${bmSide==='ns'?m.ns:m.ew}')">
+        ✅ Tamam — Oynamaya Başla
+      </button>
+    </div>
+  </div>`;
+};
 
 // ── BOARD ENTRY FORM ──
 window.bmOpenBoard=function(tableNo,boardNo){
@@ -2229,10 +2421,9 @@ function _renderBoardForm(tableNo,boardNo){
       </div>
 
       <!-- DOUBLED -->
-      <div class="bm-keypad" style="grid-template-columns:1fr 1fr 1fr;">
-        <button class="bm-key ${!bmEntry.doubled?'active':''}" onclick="bmSetDoubled(${tableNo},${boardNo},'')">Undbl</button>
-        <button class="bm-key red-key ${bmEntry.doubled==='X'?'active red-key':''}" onclick="bmSetDoubled(${tableNo},${boardNo},'X')">X Dbl</button>
-        <button class="bm-key red-key ${bmEntry.doubled==='XX'?'active red-key':''}" onclick="bmSetDoubled(${tableNo},${boardNo},'XX')">XX Rdbl</button>
+      <div class="bm-keypad" style="grid-template-columns:1fr 1fr;">
+        <button class="bm-key red-key ${bmEntry.doubled==='X'?'active red-key':''}" onclick="bmSetDoubled(${tableNo},${boardNo},'X')">✕ Dbl</button>
+        <button class="bm-key red-key ${bmEntry.doubled==='XX'?'active red-key':''}" onclick="bmSetDoubled(${tableNo},${boardNo},'XX')">✕✕ Rdbl</button>
       </div>
 
       <!-- DECLARER -->
@@ -2267,9 +2458,9 @@ function _renderBoardForm(tableNo,boardNo){
       ${previewHtml}
 
       <div style="display:flex;gap:8px;margin-top:10px;">
-        <button class="btn btn-ghost btn-full" onclick="renderTableDetail(${tableNo})">← Back</button>
+        <button class="btn btn-ghost btn-full" onclick="renderTableDetail(${tableNo})">← Geri</button>
         <button class="btn btn-gold btn-full" onclick="bmSubmitBoard(${tableNo},${boardNo})" id="submitBtn">
-          ✅ Submit
+          ✅ OK
         </button>
       </div>
     </div>
@@ -2422,17 +2613,16 @@ function bmShowApprovalWait(tableNo,boardNo,contract,nsScore){
   document.getElementById('panelContent').innerHTML=`
   <div class="bm-device">
     <div class="bm-lcd">
-      <div class="bm-lcd-row inv">BOARD ${String(boardNo).padStart(2,' ')} SUBMITTED        </div>
-      <div class="bm-lcd-row">${contract.padEnd(20)}</div>
-      <div class="bm-lcd-row">NS SCORE: ${scoreDisp.padEnd(11)}</div>
-      <div class="bm-lcd-row blink">WAITING FOR APPROVAL  </div>
+      <div class="bm-lcd-row inv">BOARD ${String(boardNo).padStart(2,' ')} GIRILDI          </div>
+      <div class="bm-lcd-row">${(contract||'').padEnd(20)}</div>
+      <div class="bm-lcd-row">NS SKOR: ${scoreDisp.padEnd(11)}</div>
+      <div class="bm-lcd-row blink">RAKIP ONAYINI BEKLE   </div>
     </div>
     <div class="approval-screen">
-      <div class="approval-title">Waiting for ${bmSide==='ns'?'EW':'NS'} to confirm</div>
-      <div class="approval-contract">${contract}</div>
+      <div class="approval-title">Rakip onaylaması bekleniyor (${bmSide==='ns'?'EW':'NS'})</div>
+      <div class="approval-contract">${contract||''}</div>
       <div class="approval-score" style="color:${nsScore>0?'var(--green)':nsScore<0?'var(--red)':'var(--text)'};">${scoreDisp}</div>
-      <div class="approval-waiting">⏳ Waiting for opponent approval...</div>
-      <button class="btn btn-ghost btn-full" onclick="renderTableDetail(${tableNo})">Back to Board List</button>
+      <div class="approval-waiting">⏳ Rakip onaylıyor...</div>
     </div>
   </div>`;
 
@@ -2447,8 +2637,8 @@ function bmShowApprovalWait(tableNo,boardNo,contract,nsScore){
     if(bd?.status==='done'){
       clearInterval(bmPollInterval);bmPollInterval=null;
       playSound('ok');
-      toast('✅ Board '+boardNo+' confirmed!');
-      renderTableDetail(tableNo);
+      // Show result + other tables, then proceed
+      bmShowBoardResult(tableNo,boardNo,bd);
     }
     polls++;
     if(polls>120){clearInterval(bmPollInterval);bmPollInterval=null;}
@@ -2477,19 +2667,19 @@ function bmShowApprovalRequest(tableNo,boardNo,boardKey,bd){
   document.getElementById('panelContent').innerHTML=`
   <div class="bm-device">
     <div class="bm-lcd">
-      <div class="bm-lcd-row inv">APPROVAL REQUIRED     </div>
-      <div class="bm-lcd-row">BOARD ${String(boardNo).padStart(2,' ')}: ${bd.contract.slice(0,12).padEnd(12)}</div>
-      <div class="bm-lcd-row">NS SCORE: ${scoreDisp.padEnd(11)}</div>
-      <div class="bm-lcd-row blink">PRESS OK TO CONFIRM   </div>
+      <div class="bm-lcd-row inv">ONAY GEREKLI          </div>
+      <div class="bm-lcd-row">BOARD ${String(boardNo).padStart(2,' ')}: ${(bd.contract||'').slice(0,12).padEnd(12)}</div>
+      <div class="bm-lcd-row">NS SKOR: ${scoreDisp.padEnd(11)}</div>
+      <div class="bm-lcd-row blink">ONAYLAMAK ICIN BASIN  </div>
     </div>
     <div class="approval-screen">
-      <div class="approval-title">⚠️ Approval Required — Board ${boardNo}</div>
-      <div class="approval-contract">${bd.contract}</div>
-      <div style="font-size:0.75rem;color:var(--text2);margin-bottom:6px;">Lead: ${bd.lead||'—'}</div>
+      <div class="approval-title">⚠️ Onay Gerekiyor — Board ${boardNo}</div>
+      <div class="approval-contract">${bd.contract||''}</div>
+      <div style="font-size:0.75rem;color:var(--text2);margin-bottom:6px;">Açılış: ${bd.lead||'—'}</div>
       <div class="approval-score" style="color:${nsScore>0?'var(--green)':nsScore<0?'var(--red)':'var(--text)'};">${scoreDisp}</div>
       <div style="display:flex;gap:8px;">
-        <button class="btn btn-red btn-full" onclick="bmRejectBoard('${boardKey}',${tableNo})">❌ Disagree</button>
-        <button class="btn btn-green btn-full" onclick="bmApproveBoard('${boardKey}',${tableNo})">✅ Confirm</button>
+        <button class="btn btn-red btn-full" onclick="bmRejectBoard('${boardKey}',${tableNo})">❌ Yanlış</button>
+        <button class="btn btn-green btn-full" onclick="bmApproveBoard('${boardKey}',${tableNo})">✅ Onayla</button>
       </div>
     </div>
   </div>`;
@@ -2509,14 +2699,14 @@ window.bmApproveBoard=function(boardKey,tableNo){
   setApprovals(appr);
   addLog('ok','Board approved',boardKey);
   playSound('ok');
-  toast('✅ Confirmed!');
-  renderTableDetail(tableNo);
+  toast('✅ Onaylandı!');
+  const[t,r,b]=boardKey.split('_');
+  const bd=getBoards()[boardKey];
+  bmShowBoardResult(tableNo,parseInt(b),bd);
 };
 
 window.bmRejectBoard=function(boardKey,tableNo){
   const boards=getBoards();
-  const bd=boards[boardKey];
-  const[t,r,b]=boardKey.split('_');
   if(boards[boardKey]) delete boards[boardKey];
   setBoards(boards);
   const appr=getApprovals();
@@ -2524,8 +2714,70 @@ window.bmRejectBoard=function(boardKey,tableNo){
   delete appr[myKey];
   setApprovals(appr);
   addLog('warn','Board rejected',boardKey);
-  toast('⚠️ Score rejected — re-enter');
+  toast('⚠️ Skor reddedildi — tekrar girin');
   renderTableDetail(tableNo);
+};
+
+// ── BOARD RESULT + OTHER TABLES SCREEN ──
+window.bmShowBoardResult=function(tableNo,boardNo,bd){
+  const s=getState();
+  const nsScore=bd.nsScore;
+  const scoreDisp=typeof nsScore==='number'?(nsScore>0?'+'+nsScore:String(nsScore)):'—';
+  const scoreColor=nsScore>0?'var(--green)':nsScore<0?'var(--red)':'var(--text)';
+
+  // Other tables for this board
+  const results=getOtherTableResults(boardNo,tableNo,s.currentRound);
+  const allResults=[{table:tableNo,contract:bd.contract,lead:bd.lead,nsScore,isMe:true},...results.map(r=>({...r,isMe:false}))];
+
+  // Sort by nsScore desc
+  allResults.sort((a,b2)=>(typeof b2.nsScore==='number'?b2.nsScore:-9999)-(typeof a.nsScore==='number'?a.nsScore:-9999));
+
+  // Find next board
+  const movements=getMovements();
+  const boards=getBoards();
+  const m=movements[s.currentRound+'_'+tableNo]||{};
+  const boardList=[];
+  for(let b=m.boardStart||1;b<=(m.boardEnd||3);b++) boardList.push(b);
+  const nextBoard=boardList.find(b2=>{
+    const key=tableNo+'_'+s.currentRound+'_'+b2;
+    const brd=boards[key];
+    return !brd||brd.status==='open';
+  });
+
+  const otherHtml=results.length>0?`
+  <div class="card" style="margin-top:10px;">
+    <div class="card-title"><span>📊</span> Diğer Masalar — Board ${boardNo}</div>
+    <table class="traveller-table">
+      <thead><tr><th>Masa</th><th>Kontrakt</th><th>NS Skor</th></tr></thead>
+      <tbody>${allResults.map(r=>`<tr ${r.isMe?'class="highlight"':''}>
+        <td style="font-size:0.75rem;">${r.isMe?'★ '+tableNo:r.table}</td>
+        <td style="font-family:\'Share Tech Mono\',monospace;font-size:0.75rem;">${r.contract||'—'}</td>
+        <td style="font-weight:700;color:${r.nsScore>0?'var(--green)':r.nsScore<0?'var(--red)':'var(--text)'};">${typeof r.nsScore==='number'?(r.nsScore>0?'+':'')+r.nsScore:'⏳'}</td>
+      </tr>`).join('')}</tbody>
+    </table>
+  </div>`:`<div style="font-size:0.78rem;color:var(--text3);text-align:center;margin-top:10px;padding:10px;">Diğer masalar henüz tamamlamadı</div>`;
+
+  const nextBtnHtml=nextBoard
+    ?`<button class="btn btn-gold btn-full" onclick="bmOpenBoard(${tableNo},${nextBoard})" style="margin-top:12px;">▶ Board ${nextBoard}'e Geç</button>`
+    :`<button class="btn btn-green btn-full" onclick="renderTableDetail(${tableNo})" style="margin-top:12px;">✅ Tur Özeti</button>`;
+
+  document.getElementById('panelContent').innerHTML=`
+  <div class="bm-device">
+    <div class="bm-lcd">
+      <div class="bm-lcd-row inv">BOARD ${String(boardNo).padStart(2,' ')} ONAYLANDI         </div>
+      <div class="bm-lcd-row">${(bd.contract||'').padEnd(20)}</div>
+      <div class="bm-lcd-row">NS SKOR: ${scoreDisp.padEnd(11)}</div>
+      <div class="bm-lcd-row dim">                      </div>
+    </div>
+    <div style="text-align:center;padding:16px 0 8px;">
+      <div style="font-size:0.72rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Board ${boardNo} Sonucu</div>
+      <div style="font-family:\'Share Tech Mono\',monospace;font-size:1.1rem;margin-bottom:4px;">${bd.contract||'—'}</div>
+      <div style="font-size:2.2rem;font-weight:900;font-family:\'Playfair Display\',serif;color:${scoreColor};">${scoreDisp}</div>
+      <div style="font-size:0.72rem;color:var(--text3);">NS Skoru</div>
+    </div>
+    ${otherHtml}
+    ${nextBtnHtml}
+  </div>`;
 };
 
 // ── OTHER TABLE RESULTS (comparison) ──
