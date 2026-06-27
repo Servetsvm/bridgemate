@@ -313,22 +313,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <button class="role-tab" id="rtab-screen" onclick="selRole(&#39;screen&#39;)">📺 Screen</button>
     </div>
 
-    <!-- QR connect box — shown when Table/Screen selected -->
-    <div id="qrJoinBox" style="display:none;margin:14px 0;padding:14px;background:var(--surface2);border-radius:10px;border:1px solid var(--border);text-align:center;">
-      <div style="font-size:0.82rem;font-weight:600;color:var(--gold);margin-bottom:6px;">📱 QR Code Login</div>
-      <div style="font-size:0.75rem;color:var(--text2);margin-bottom:12px;">
-        Scan the Admin QR code with your phone's QR app.<br>
-        The link opens — enter your table number.
-      </div>
-      <div id="qrScanResult" style="font-size:0.72rem;color:var(--text3);min-height:16px;margin-bottom:8px;"></div>
-      <div style="border-top:1px solid var(--border);padding-top:10px;">
-        <div style="font-size:0.72rem;color:var(--text3);margin-bottom:6px;">Or enter Tournament ID manually:</div>
-        <div style="display:flex;gap:6px;">
-          <input id="manualTid" placeholder="2026-06-25_1435" style="flex:1;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.82rem;outline:none;" onkeydown="if(event.key===&#39;Enter&#39;)joinByTid()">
-          <button class="btn btn-blue btn-sm" onclick="joinByTid()">Connect</button>
-        </div>
-      </div>
-    </div>
+    <!-- QR connect box removed: QR links now bypass login directly via ?tid= URL parameter -->
 
     <div class="pw-wrap" id="pwWrap" style="display: block;">
       <input type="password" id="pwInput" placeholder="Password" onkeydown="if(event.key===&#39;Enter&#39;)doLogin()">
@@ -495,6 +480,8 @@ function fbSubscribe(key){
           if(otherDiv)otherDiv.innerHTML=buildOtherHTMLGlobal();
         }
       } else if(role==='admin'){
+        // Don't re-render setup tab if adminSetup() is actively running
+        if(_adminSetupBusy)return;
         const at=document.getElementById('adminContent');
         if(at&&(adminTab==='tables'||adminTab==='boards'||adminTab==='setup')){
           renderAdminTab();
@@ -742,10 +729,8 @@ window.selRole=function(r){
   document.getElementById('rtab-'+r)?.classList.add('active');
   document.getElementById('loginErr').textContent='';
   document.getElementById('pwInput').value='';
-  document.getElementById('pwWrap').style.display=(r==='admin'||r==='table')?'block':'none';
-  // Show QR box when Table or Screen selected
-  const qrBox=document.getElementById('qrJoinBox');
-  if(qrBox)qrBox.style.display=(r==='table'||r==='screen')?'block':'none';
+  // Only show password field for admin
+  document.getElementById('pwWrap').style.display=(r==='admin')?'block':'none';
 };
 selRole('admin');
 
@@ -753,7 +738,7 @@ window.doLogin=function(){
   const err=document.getElementById('loginErr');err.textContent='';
   const pw=document.getElementById('pwInput').value;
   if(role==='admin'&&pw!==PASS.admin){err.textContent='❌ Yanlis sifre';return;}
-  if(role==='table'&&pw!==PASS.table){err.textContent='❌ Yanlis sifre';return;}
+  // Table and Screen roles: no password required
   if(role==='admin'){
     const snap=localStorage.getItem('bm_adminSessionSnap');
     const st=DB.get('state');
@@ -2210,7 +2195,11 @@ function fbAutoConnectOnSetup(tourneyName){
   setFBTourneyId(tid);
   _fbTourneyId=tid;
   if(_fbDb){
-    ['state','pairs','boards','movements','approvals','archives','logs'].forEach(k=>fbSubscribe(k));
+    // Delay subscriptions so Firebase initial snapshots don't re-render
+    // the setup form before it has been rendered with our new data
+    setTimeout(()=>{
+      ['state','pairs','boards','movements','approvals','archives','logs'].forEach(k=>fbSubscribe(k));
+    }, 6000);
   }
 }
 
@@ -2362,7 +2351,6 @@ window.adminSetup=function(){
   const scoring=document.getElementById('aScoring')?.value||'MP';
   const mov=document.getElementById('aMovement')?.value||'mitchell';
   _adminSetupBusy=true;
-  setTimeout(()=>_adminSetupBusy=false,2000);
   const now=new Date();
   const pad=n=>String(n).padStart(2,'0');
   const autoName=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate())+'_'+pad(now.getHours())+pad(now.getMinutes());
@@ -2385,7 +2373,11 @@ window.adminSetup=function(){
   fbAutoConnectOnSetup(name);
   addLog('ok','Tournament created',`${players} players, ${tables} tables, ${result.rounds} rounds, ${mov}, ${scoring}`);
   toast('✅ Tournament created!');
-  refreshTopbar();renderAdminTab();
+  refreshTopbar();
+  renderAdminTab();
+  // Clear busy flag AFTER our own render is done, on next tick
+  // so any Firebase callbacks that fire during setState are suppressed
+  setTimeout(()=>{ _adminSetupBusy=false; }, 5000);
 };
 
 window.adminStart=function(){
