@@ -762,19 +762,9 @@ window.doLogin=async function(){
 
   refreshTopbar();
 
-  // Resume table session
+  // Table role: always clear session and show table selection
   if(role==='table'){
-    const sess=getTableSession();
-    if(sess&&sess.tid===_fbTourneyId){
-      const s=getState();
-      if(s&&s.status==='running'){
-        bmTableNo=sess.tableNo;
-        bmSide=sess.side||'ns';
-        toast('📍 Resuming Table '+sess.tableNo);
-        renderTableDetail(sess.tableNo);
-        return;
-      }
-    }
+    clearTableSession();
   }
   renderPanel();
 };
@@ -1207,9 +1197,8 @@ window.adminReset=function(){
   fbUnsubscribeAll();
   clearTableSession();
   addLog('warn','Tournament reset','All data cleared');
-  toast('🗑 Reset complete');
-  adminTab='setup';
-  renderAdminPanel();
+  toast('🗑 Reset complete — reloading...');
+  setTimeout(()=>window.location.reload(),800);
 };
 
 window.adminFinish=function(){
@@ -1868,15 +1857,10 @@ function renderTablePanel(){
     <div class="bm-lcd">
       <div class="bm-lcd-row inv">BRIDGEMATE  v3.0      </div>
       <div class="bm-lcd-row">${(s.name||'Tournament').slice(0,20).padEnd(20)}</div>
-      <div class="bm-lcd-row">SELECT SIDE & TABLE   </div>
+      <div class="bm-lcd-row">SELECT YOUR TABLE     </div>
       <div class="bm-lcd-row dim">RND ${String(s.currentRound).padStart(2,' ')} / ${String(s.roundCount).padStart(2,' ')}            </div>
     </div>
     <div class="card">
-      <div class="card-title"><span>🎯</span> Your Direction</div>
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;">
-        <button class="btn ${bmSide==='ns'?'btn-blue':'btn-ghost'} btn-full" onclick="bmSetSide('ns')">🔵 NS (North-South)</button>
-        <button class="btn ${bmSide==='ew'?'btn-gold':'btn-ghost'} btn-full" onclick="bmSetSide('ew')">🟡 EW (East-West)</button>
-      </div>
       <div class="card-title"><span>🪑</span> Table Number</div>
       <div class="bm-keypad" id="tableKeypad">
         ${Array.from({length:s.tableCount},(_,i)=>`<button class="bm-key" onclick="bmSelectTable(${i+1})">${i+1}</button>`).join('')}
@@ -1885,20 +1869,8 @@ function renderTablePanel(){
   </div>`;
 }
 
-window.bmSetSide=function(side){
-  bmSide=side;
-  renderTablePanel();
-};
-
 window.bmSelectTable=async function(n){
   const s=getState();
-  // Check lock
-  const lockKey='lock_'+s.currentRound+'_'+n+'_'+bmSide;
-  const appr=getApprovals();
-  if(appr[lockKey]&&appr[lockKey]!==_fbTourneyId+'_'+n+'_'+bmSide){
-    toast('❌ Table '+n+' '+bmSide.toUpperCase()+' already taken');
-    return;
-  }
 
   // If Firebase cache empty, load first
   if(_fbOnline&&_fbDb&&_fbTourneyId&&
@@ -1915,18 +1887,79 @@ window.bmSelectTable=async function(n){
 
   const pairs=getPairs();
   const movements=getMovements();
-  const mk=s.currentRound+'_'+n;
-  const m=movements[mk]||{};
-  const pairKey=bmSide==='ns'?m.ns:m.ew;
+  const m=movements[s.currentRound+'_'+n]||{};
+  const appr=getApprovals();
+  const nsLocked=!!appr['lock_'+s.currentRound+'_'+n+'_ns'];
+  const ewLocked=!!appr['lock_'+s.currentRound+'_'+n+'_ew'];
+
+  if(nsLocked&&ewLocked){
+    toast('❌ Table '+n+' is fully occupied');
+    return;
+  }
+
+  if(!nsLocked&&!ewLocked){
+    // Both free — ask NS or EW
+    bmShowSideChoice(n,m,pairs);
+  } else {
+    // Auto-assign the free side
+    bmSide=nsLocked?'ew':'ns';
+    const pairKey=bmSide==='ns'?m.ns:m.ew;
+    const pair=pairs[pairKey]||{};
+    bmTableNo=n;
+    saveTableSession(n,bmSide);
+    bmShowNameConfirm(n,pairKey,pair.name,m);
+  }
+};
+
+window.bmShowSideChoice=function(tableNo,m,pairs){
+  const s=getState();
+  const nsNum=(m.ns||'').replace(/[^0-9]/g,'');
+  const ewNum=(m.ew||'').replace(/[^0-9]/g,'');
+  const nsPair=pairs[m.ns]||{name:'NS '+nsNum};
+  const ewPair=pairs[m.ew]||{name:'EW '+ewNum};
+  document.getElementById('panelContent').innerHTML=`
+  <div class="bm-device">
+    <div class="bm-lcd">
+      <div class="bm-lcd-row inv">TABLE ${String(tableNo).padStart(2,' ')}  RND ${String(s.currentRound).padStart(2,' ')}          </div>
+      <div class="bm-lcd-row">N${nsNum.padEnd(2,' ')}:${nsPair.name.slice(0,17).padEnd(17)}</div>
+      <div class="bm-lcd-row">E${ewNum.padEnd(2,' ')}:${ewPair.name.slice(0,17).padEnd(17)}</div>
+      <div class="bm-lcd-row">SELECT YOUR SIDE      </div>
+    </div>
+    <div class="card">
+      <div class="card-title"><span>🎯</span> Your Direction — Table ${tableNo}</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <button class="btn btn-blue btn-full" style="flex-direction:column;padding:14px 8px;height:auto;"
+          onclick="bmChooseSide(${tableNo},'ns')">
+          <span style="font-size:1.1rem;margin-bottom:4px;">🔵 NS</span>
+          <span style="font-size:0.72rem;opacity:0.85;">${nsPair.name}</span>
+        </button>
+        <button class="btn btn-gold btn-full" style="flex-direction:column;padding:14px 8px;height:auto;"
+          onclick="bmChooseSide(${tableNo},'ew')">
+          <span style="font-size:1.1rem;margin-bottom:4px;">🟡 EW</span>
+          <span style="font-size:0.72rem;opacity:0.85;">${ewPair.name}</span>
+        </button>
+      </div>
+      <button class="btn btn-ghost btn-full" onclick="renderTablePanel()">← Back</button>
+    </div>
+  </div>`;
+};
+
+window.bmChooseSide=function(tableNo,side){
+  const s=getState();
+  const appr=getApprovals();
+  if(appr['lock_'+s.currentRound+'_'+tableNo+'_'+side]){
+    toast('❌ That side is already taken');
+    return;
+  }
+  bmSide=side;
+  const movements=getMovements();
+  const m=movements[s.currentRound+'_'+tableNo]||{};
+  const pairKey=side==='ns'?m.ns:m.ew;
+  const pairs=getPairs();
   const pair=pairs[pairKey]||{};
-  const nm=(pair.name||'').trim();
-  const isDefault=!nm||/^(NS|EW)\s*\d+$/.test(nm)||/^Pair\s*\d+$/.test(nm);
-
-  bmTableNo=n;
-  saveTableSession(n,bmSide);
-
-  // Always show confirm screen - name entry is optional
-  bmShowNameConfirm(n,pairKey,pair.name,m);
+  bmTableNo=tableNo;
+  saveTableSession(tableNo,side);
+  bmShowNameConfirm(tableNo,pairKey,pair.name,m);
 };
 
 window.bmShowNameConfirm=function(tableNo,pairKey,loadedName,m){
@@ -2200,7 +2233,7 @@ function _renderRoundOverScreen(tableNo,s,movements,pairs,boardList){
         <div class="ro-badge">🏁</div>
         <div class="ro-title">Tournament Complete!</div>
         <div class="ro-sub">All rounds have been played</div>
-        <button class="btn btn-gold btn-full" onclick="bmViewScoreboard()" style="margin-top:12px;">🏆 Sonuçları Gör</button>
+        <button class="btn btn-gold btn-full" onclick="bmViewScoreboard()" style="margin-top:12px;">🏆 View Results</button>
       </div>
     </div>`;
     return;
@@ -2242,7 +2275,7 @@ function _renderRoundOverScreen(tableNo,s,movements,pairs,boardList){
       <div class="ro-move-card" style="text-align:center;margin:12px 0;">
         <div class="ro-move-label">Movement</div>
         <div class="ro-move-main" style="font-size:1.1rem;">${stayOrMove}</div>
-        <div class="ro-move-sub" style="margin-top:4px;">${myNextRole||bmSide.toUpperCase()} olarak · Boards ${nextM.boardStart||'?'}–${nextM.boardEnd||'?'}</div>
+        <div class="ro-move-sub" style="margin-top:4px;">${myNextRole||bmSide.toUpperCase()} · Boards ${nextM.boardStart||'?'}–${nextM.boardEnd||'?'}</div>
       </div>
 
       <button class="btn btn-gold btn-full" id="btnMoveOk" onclick="bmRoundMoveOK(${tableNo},${nextRound},${myNextTable})" style="margin-bottom:8px;">
@@ -2304,7 +2337,7 @@ window.bmShowNewOpponents=function(tableNo,round){
   <div class="bm-device">
     <div class="bm-lcd">
       <div class="bm-lcd-row inv">RND ${String(round).padStart(2,' ')} STARTED!           </div>
-      <div class="bm-lcd-row">MASA ${String(tableNo).padStart(2,' ')}                   </div>
+      <div class="bm-lcd-row">TABLE ${String(tableNo).padStart(2,' ')}                  </div>
       <div class="bm-lcd-row">N${nsNum.padEnd(2,' ')}:${nsPair.name.slice(0,17).padEnd(17)}</div>
       <div class="bm-lcd-row">E${ewNum.padEnd(2,' ')}:${ewPair.name.slice(0,17).padEnd(17)}</div>
     </div>
@@ -2758,7 +2791,7 @@ window.bmShowBoardResult=function(tableNo,boardNo,bd){
   </div>`:`<div style="font-size:0.78rem;color:var(--text3);text-align:center;margin-top:10px;padding:10px;">Other tables have not finished yet</div>`;
 
   const nextBtnHtml=nextBoard
-    ?`<button class="btn btn-gold btn-full" onclick="bmOpenBoard(${tableNo},${nextBoard})" style="margin-top:12px;">▶ Board ${nextBoard}'e Geç</button>`
+    ?`<button class="btn btn-gold btn-full" onclick="bmOpenBoard(${tableNo},${nextBoard})" style="margin-top:12px;">▶ Go to Board ${nextBoard}</button>`
     :`<button class="btn btn-green btn-full" onclick="renderTableDetail(${tableNo})" style="margin-top:12px;">✅ Round Summary</button>`;
 
   document.getElementById('panelContent').innerHTML=`
