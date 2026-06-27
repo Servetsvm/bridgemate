@@ -319,7 +319,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <input type="password" id="pwInput" placeholder="Password" onkeydown="if(event.key===&#39;Enter&#39;)doLogin()">
     </div>
     <div class="login-err" id="loginErr"></div>
-    <button class="btn-primary" onclick="doLogin()">Giris Yap</button>
+    <button class="btn-primary" onclick="doLogin()">Sign In</button>
     <div style="text-align:center;margin-top:14px;">
       <span style="font-size:0.7rem;color:var(--text3);">BridgeMate v2.1 &nbsp;</span>
       <span style="font-size:0.7rem;color:var(--gold);cursor:pointer;text-decoration:underline;" onclick="showFirebasePanel()">⚡ Firebase Sync Ayarla</span>
@@ -338,7 +338,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
     <div class="topbar-right">
       <div id="fbStatusBadge" style="display:inline-flex;align-items:center;gap:4px;font-size:0.68rem;padding:3px 9px;border-radius:10px;background:var(--surface2);border:1px solid var(--border);cursor:pointer;" onclick="role===&#39;admin&#39;?showQR():showFirebasePanel()" title="Firebase">
         <span id="fbStatusDot" style="width: 7px; height: 7px; border-radius: 50%; background: var(--green); flex-shrink: 0;"></span>
-        <span id="fbStatusTxt" style="color:var(--text3);">Canli</span>
+        <span id="fbStatusTxt" style="color:var(--text3);">Live</span>
       </div>
       <div id="fbErr" style="display:none;font-size:0.68rem;color:var(--red);padding:2px 8px;background:var(--reddim);border-radius:8px;"></div>
       <button class="tbtn" onclick="toggleTheme()">🌓</button>
@@ -422,7 +422,7 @@ function initFirebase(cfg){
       const dot=document.getElementById('fbStatusDot');
       const txt=document.getElementById('fbStatusTxt');
       if(dot){dot.style.background=connected?'var(--green)':'var(--red)';}
-      if(txt){txt.textContent=connected?'Canli':'Cevrimdisi';}
+      if(txt){txt.textContent=connected?'Live':'Offline';}
     });
     return true;
   }catch(e){
@@ -496,8 +496,8 @@ function buildOtherHTMLGlobal(boardNo_,tableNo_,round_){
   if(!boardNo_)return'';
   const s_=getState();
   const others=getOtherTablesSameBoard(boardNo_,tableNo_||bmTableNo,round_||s_.currentRound);
-  if(!others.length)return'<div style="font-size:0.75rem;color:var(--text3);margin-top:8px;text-align:center;">Diger masalar henuz oynamadi</div>';
-  let h='<div style="margin-top:10px;"><div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Ayni board - Diger masalar</div>';
+  if(!others.length)return'<div style="font-size:0.75rem;color:var(--text3);margin-top:8px;text-align:center;">Other tables have not played yet</div>';
+  let h='<div style="margin-top:10px;"><div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Same board — Other tables</div>';
   others.forEach(function(o){
     const sc=o.nsScore>0?'var(--green)':o.nsScore<0?'var(--red)':'var(--gold)';
     h+='<div style="display:flex;justify-content:space-between;align-items:center;background:var(--surface2);border-radius:6px;padding:6px 10px;margin-bottom:4px;font-size:0.78rem;">'
@@ -729,16 +729,17 @@ window.selRole=function(r){
   document.getElementById('rtab-'+r)?.classList.add('active');
   document.getElementById('loginErr').textContent='';
   document.getElementById('pwInput').value='';
-  // Show password field for admin and table, not for screen
-  document.getElementById('pwWrap').style.display=(r==='admin'||r==='table')?'block':'none';
+  // Show password field for all roles
+  document.getElementById('pwWrap').style.display='block';
 };
 selRole('admin');
 
 window.doLogin=function(){
   const err=document.getElementById('loginErr');err.textContent='';
   const pw=document.getElementById('pwInput').value;
-  if(role==='admin'&&pw!==PASS.admin){err.textContent='❌ Yanlis sifre';return;}
-  if(role==='table'&&pw!==PASS.table){err.textContent='❌ Yanlis sifre';return;}
+  if(role==='admin'&&pw!==PASS.admin){err.textContent='❌ Wrong password';return;}
+  if(role==='table'&&pw!==PASS.table){err.textContent='❌ Wrong password';return;}
+  if(role==='screen'&&pw!==PASS.table){err.textContent='❌ Wrong password';return;}
   if(role==='admin'){
     const snap=localStorage.getItem('bm_adminSessionSnap');
     const st=DB.get('state');
@@ -752,11 +753,11 @@ window.doLogin=function(){
         <div style="max-width:420px;margin:40px auto;padding:0 14px;">
           <div class="card" style="text-align:center;border-color:var(--gold);">
             <div style="font-size:2rem;margin-bottom:10px;">⚠️</div>
-            <div style="font-size:1rem;font-weight:700;color:var(--gold);margin-bottom:6px;">Kaydedilmis turnuva bulundu</div>
+            <div style="font-size:1rem;font-weight:700;color:var(--gold);margin-bottom:6px;">Saved tournament found</div>
             <div style="font-size:0.82rem;color:var(--text2);margin-bottom:18px;">${st.name}</div>
             <div style="display:flex;gap:8px;">
-              <button class="btn btn-green btn-full" onclick="sessionContinue()">&#x25b6; Devam Et</button>
-              <button class="btn btn-red btn-full" onclick="sessionNew()">&#x2795; Yeni Turnuva</button>
+              <button class="btn btn-green btn-full" onclick="sessionContinue()">▶ Continue</button>
+              <button class="btn btn-red btn-full" onclick="sessionNew()">➕ New Tournament</button>
             </div>
           </div>
         </div>`;
@@ -793,7 +794,7 @@ window.doLogin=function(){
           setTimeout(()=>{
             const s=getState();
             if(s&&s.status==='running'){
-              toast('📍 Table '+obj.tableNo+' oturumu devam ediyor...');
+              toast('📍 Resuming Table '+obj.tableNo+' session...');
               renderTableDetail(obj.tableNo);
             } else {
               renderPanel();
@@ -808,7 +809,7 @@ window.doLogin=function(){
 };
 window.sessionContinue=function(){renderAdminPanel();};
 window.sessionNew=function(){
-  if(!confirm('Mevcut turnuva silinecek. Emin misiniz?'))return;
+  if(!confirm('Current tournament will be deleted. Are you sure?'))return;
   ['state','pairs','boards','movements','logs','approvals'].forEach(k=>DB.del(k));
   localStorage.removeItem('bm_adminSessionSnap');
   renderAdminPanel();
@@ -819,7 +820,7 @@ window.doLogout=function(){
     if(st&&st.status==='running'){
       // Save snapshot for session restore
       localStorage.setItem('bm_adminSessionSnap','1');
-      if(!confirm('Admin sayfasindan cikiyorsunuz.\n\nYedek almak ister misiniz?\n(Iptal: Yedek al, Tamam: Devam)')){
+      if(!confirm('Leaving the Admin panel.\n\nWould you like to export a backup?\n(Cancel: Export backup, OK: Continue)')){
         adminExport();
       }
     }
@@ -852,7 +853,7 @@ function refreshTopbar(){
   const s=getState();const el=document.getElementById('topbarRound');
   if(s.currentRound>0){
     el.style.display='inline-flex';
-    el.textContent='Tur '+s.currentRound+'/'+s.roundCount+(s.name?' · '+s.name:'');
+    el.textContent='Round '+s.currentRound+'/'+s.roundCount+(s.name?' · '+s.name:'');
   } else el.style.display='none';
 }
 
@@ -1094,7 +1095,7 @@ function renderTableDetail(tableNo){
       </div>
       <div id="boardsSection">
         <div class="card">
-          <div class="card-title"><span>🃏</span> ${allDone?'Tum Boardlar Tamamlandi ✓':nextBoard?'Siradaki Board: '+nextBoard.boardNo:approvalPending?'Onay Bekleniyor...':'Hazir'}</div>
+          <div class="card-title"><span>🃏</span> ${allDone?'All Boards Done ✓':nextBoard?'Next Board: '+nextBoard.boardNo:approvalPending?'Awaiting Approval...':'Ready'}</div>
           <div id="boardsList">${boardsHTML}</div>
           ${isPhantom?`<div style="margin-top:8px;text-align:center;font-size:0.8rem;color:var(--purple);">👻 Phantom pair — sit out</div>`:''}
         </div>
@@ -1659,7 +1660,7 @@ function renderScreenPanel(){
       <div class="sb-header">
         <div class="sb-title">🏆 ${s.name}</div>
         <div style="display:flex;gap:6px;align-items:center;">
-          <span class="live-pill"><div class="live-dot"></div>Canli</span>
+          <span class="live-pill"><div class="live-dot"></div>Live</span>
           <button class="btn btn-blue btn-sm" onclick="screenPrintPDF()">🖨 PDF Export</button>
         </div>
       </div>
@@ -1701,7 +1702,7 @@ window.screenPrintPDF=function(){
     const bidding=d.bidding||d.auction||'';
     rows+=`<tr style="background:${rowBg}">
       <td style="font-weight:700;color:#1565c0;">Table ${t}</td>
-      <td>Tur ${r}</td>
+      <td>Round ${r}</td>
       <td style="font-weight:700;">Board ${b}</td>
       <td style="color:#1565c0;font-size:9.5px;">${nsLabel}</td>
       <td style="color:#e65100;font-size:9.5px;">${ewLabel}</td>
@@ -1733,7 +1734,7 @@ window.screenPrintPDF=function(){
 
   const win=window.open('','_blank');
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
-  <title>${s.name} — Turnuva Sonuclari</title>
+  <title>${s.name} — Tournament Results</title>
   <style>
     body{font-family:Arial,sans-serif;font-size:11px;margin:16px;color:#222;}
     h1{font-size:18px;margin-bottom:4px;color:#1a237e;}
@@ -1746,7 +1747,7 @@ window.screenPrintPDF=function(){
   </style>
   </head><body>
   <h1>♠ ${s.name}</h1>
-  <div class="meta">${s.tableCount} masa · ${s.roundCount} tur · ${s.boardsPerRound} board/tur · ${s.scoring||'MP'} · ${s.movement||''} · Yazdirilma: ${new Date().toLocaleString('tr-TR')}</div>
+  <div class="meta">${s.tableCount} tables · ${s.roundCount} rounds · ${s.boardsPerRound} boards/round · ${s.scoring||'MP'} · ${s.movement||''} · Printed: ${new Date().toLocaleString('en-GB')}</div>
   <h2>🏆 Overall Rankings</h2>
   <table><thead><tr><th>#</th><th>Player</th><th>Dir</th><th>MP</th><th>%</th></tr></thead><tbody>${rankRows}</tbody></table>
   <h2>📊 All Completed Board Results</h2>
@@ -1834,7 +1835,7 @@ window.showQR=function(){
       </div>
       <div id="qrCanvas" style="display:inline-block;background:#fff;padding:14px;border-radius:10px;margin-bottom:10px;"></div>
       <div style="background:var(--surface2);border-radius:8px;padding:8px 14px;margin-bottom:8px;">
-        <span style="font-size:0.7rem;color:var(--text3);">Turnuva ID: </span>
+        <span style="font-size:0.7rem;color:var(--text3);">Tournament ID: </span>
         <span style="font-family:'Share Tech Mono',monospace;font-size:0.85rem;color:var(--gold);font-weight:700;">${tid}</span>
       </div>
       <div style="font-size:0.72rem;color:var(--text3);line-height:1.6;">
@@ -1843,7 +1844,7 @@ window.showQR=function(){
         ✏️ Name entry is optional
       </div>
     </div>`,
-    `<button class="btn btn-ghost" onclick="closeModal()">Kapat</button>`);
+    `<button class="btn btn-ghost" onclick="closeModal()">Close</button>`);
   // Generate QR
   function tryRenderQR(attempt){
     const el=document.getElementById('qrCanvas');
@@ -1916,7 +1917,7 @@ function _openCamera(){
       <canvas id="qrCanvas2" style="display:none;"></canvas>
       <div id="qrScanStatus" style="margin-top:8px;font-size:0.8rem;color:var(--text2);">Opening camera...</div>
     </div>`,
-    `<button class="btn btn-ghost" onclick="stopQRScan();closeModal()">Kapat</button>`);
+    `<button class="btn btn-ghost" onclick="stopQRScan();closeModal()">Close</button>`);
 
   // Wait for DOM render, then open camera
   setTimeout(function(){
@@ -2084,7 +2085,7 @@ window.showFirebasePanel=function(){
   const cfg=getFBConfig()||{};
   const tid=getFBTourneyId()||'';
   const statusColor=_fbOnlineMode?'var(--green)':'var(--text3)';
-  const statusText=_fbOnlineMode?'Baglantilar aktif':'Baglanmadi';
+  const statusText=_fbOnlineMode?'Connected':'Disconnected';
   openModal('Firebase Sync',`
     <div style="background:var(--surface2);border-radius:8px;padding:12px;margin-bottom:12px;">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
@@ -2092,23 +2093,23 @@ window.showFirebasePanel=function(){
         <span style="font-weight:700;color:${statusColor};">${statusText}</span>
       </div>
       <div style="font-size:0.75rem;color:var(--text3);">Proje: <b style="color:var(--text);">bridgemate-77c72</b></div>
-      <div style="font-size:0.75rem;color:var(--text3);margin-top:2px;">Turnuva ID: <b style="color:var(--gold);">${tid||'Henuz turnuva baslatilmadi'}</b></div>
+      <div style="font-size:0.75rem;color:var(--text3);margin-top:2px;">Tournament ID: <b style="color:var(--gold);">${tid||'No tournament started yet'}</b></div>
     </div>
     <p style="font-size:0.8rem;color:var(--text2);margin-bottom:12px;">
-      Firebase konfigurasyonu dosyaya islenmis. Tum cihazlar bu projeye baglanir.<br>
-      <b style="color:var(--gold);">Turnuva baslatildiginda</b> ID otomatik atanir ve sync baslar.
+      Firebase config is embedded in the file. All devices connect to this project.<br>
+      <b style="color:var(--gold);">When a tournament is created</b>, the ID is assigned automatically and sync begins.
     </p>
     <div class="field">
-      <label>Turnuva ID (el ile baglanti icin)</label>
-      <input id="fb_tourneyId" value="${tid}" placeholder="Bos birak: turnuva baslatinca otomatik">
+      <label>Tournament ID (manual connection)</label>
+      <input id="fb_tourneyId" value="${tid}" placeholder="Leave empty: auto-assigned when tournament starts">
     </div>
     <div style="background:var(--surface2);border-radius:6px;padding:8px;font-size:0.72rem;color:var(--text3);margin-top:4px;">
-      Farkli bir turnuvaya baglanmak icin ID girin.<br>
-      Ornek: <code style="color:var(--gold);">2026-06-24_1435</code>
+      Enter an ID to connect to a different tournament.<br>
+      Example: <code style="color:var(--gold);">2026-06-24_1435</code>
     </div>`,
-    `<button class="btn btn-ghost" onclick="closeModal()">Kapat</button>
+    `<button class="btn btn-ghost" onclick="closeModal()">Close</button>
      <button class="btn btn-red btn-sm" onclick="fbDisconnect()">Disconnect</button>
-     <button class="btn btn-gold" onclick="fbConnectSimple()">Baglan</button>`);
+     <button class="btn btn-gold" onclick="fbConnectSimple()">Connect</button>`);
 };
 
 window.fbConnect=function(){
@@ -2170,7 +2171,7 @@ window.fbConnectSimple=function(){
   setFBTourneyId(tid);
   _fbTourneyId=tid;
   ['state','pairs','boards','movements','approvals','archives','logs'].forEach(k=>fbSubscribe(k));
-  toast('Firebase baglandi — Turnuva: '+tid);
+  toast('Firebase connected — Tournament: '+tid);
   closeModal();
 };
 
@@ -2186,22 +2187,51 @@ window.fbDisconnect=function(){
   const txt=document.getElementById('fbStatusTxt');
   if(dot)dot.style.background='var(--text3)';
   if(txt)txt.textContent='Offline';
-  toast('Firebase baglantisi kesildi — yerel mod aktif');
+  toast('Firebase disconnected — local mode active');
   closeModal();
 };
 
+let _fbSubscribePending=false;
 function fbAutoConnectOnSetup(tourneyName){
   const tid=makeTourneyId(tourneyName);
   setFBTourneyId(tid);
   _fbTourneyId=tid;
   if(_fbDb){
-    // Delay subscriptions so Firebase initial snapshots don't re-render
-    // the setup form before it has been rendered with our new data
-    setTimeout(()=>{
-      ['state','pairs','boards','movements','approvals','archives','logs'].forEach(k=>fbSubscribe(k));
-    }, 15000);
+    // Don't auto-subscribe yet — wait for user to press "Enable Firebase Sync"
+    _fbSubscribePending=true;
+    renderFbSyncBanner();
   }
 }
+function renderFbSyncBanner(){
+  // Show a persistent banner in admin setup tab
+  const existing=document.getElementById('fbSyncBanner');
+  if(existing)return; // already shown
+  const adminContent=document.getElementById('adminContent');
+  if(!adminContent)return;
+  const banner=document.createElement('div');
+  banner.id='fbSyncBanner';
+  banner.style.cssText='background:var(--golddim);border:1px solid rgba(201,168,76,0.4);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;';
+  banner.innerHTML=`<span style="font-size:0.8rem;color:var(--gold);">⚡ Firebase sync ready — enable when all devices are connected</span>
+    <div style="display:flex;gap:6px;">
+      <button class="btn btn-green btn-sm" onclick="fbSyncStart()">▶ Start Sync</button>
+      <button class="btn btn-ghost btn-sm" onclick="fbSyncCancel()">✕ Cancel</button>
+    </div>`;
+  adminContent.prepend(banner);
+}
+window.fbSyncStart=function(){
+  if(!_fbSubscribePending){return;}
+  _fbSubscribePending=false;
+  _adminSetupBusy=false;
+  ['state','pairs','boards','movements','approvals','archives','logs'].forEach(k=>fbSubscribe(k));
+  const b=document.getElementById('fbSyncBanner');if(b)b.remove();
+  toast('✅ Firebase sync started!');
+};
+window.fbSyncCancel=function(){
+  _fbSubscribePending=false;
+  _adminSetupBusy=false;
+  const b=document.getElementById('fbSyncBanner');if(b)b.remove();
+  toast('Firebase sync cancelled — local mode only');
+};
 
 let adminTab='setup';
 
@@ -2313,9 +2343,9 @@ function renderSetup(){
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <div style="display:inline-flex;align-items:center;gap:5px;font-size:0.75rem;">
           <span id="fbStatusDot2" style="width:8px;height:8px;border-radius:50%;background:${_fbOnlineMode?'var(--green)':'var(--text3)'};"></span>
-          <span style="color:var(--text2);">${_fbOnlineMode?('Aktif • '+(_fbTourneyId||'')):'Bagli degil'}</span>
+          <span style="color:var(--text2);">${_fbOnlineMode?('Active • '+(_fbTourneyId||'')):'Not connected'}</span>
         </div>
-        <button class="btn btn-gold btn-sm" onclick="showFirebasePanel()">⚙️ Ayarlar</button>
+        <button class="btn btn-gold btn-sm" onclick="showFirebasePanel()">⚙️ Settings</button>
         <button class="btn btn-blue btn-sm" onclick="showQR()">📱 QR Kod</button>
       </div>
     </div>
@@ -2375,9 +2405,7 @@ window.adminSetup=function(){
   toast('✅ Tournament created!');
   refreshTopbar();
   renderAdminTab();
-  // Clear busy flag AFTER our own render is done, on next tick
-  // so any Firebase callbacks that fire during setState are suppressed
-  setTimeout(()=>{ _adminSetupBusy=false; }, 14000);
+  // _adminSetupBusy will be cleared when user presses Start Sync or Cancel Sync
 };
 
 window.adminStart=function(){
@@ -2464,7 +2492,7 @@ function renderPlayersAdmin(){
     <div class="player-name-input">
       <span class="player-num">${k.replace('ns_','N').replace('ew_','E').replace('p','P')}</span>
       <input value="${p.name}" onchange="updatePairName('${k}',this.value)"
-        placeholder="Ad Soyad"
+        placeholder="Full Name"
         style="flex:1;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem;outline:none;font-family:inherit;">
     </div>`;};
 
@@ -2874,8 +2902,8 @@ window.viewArchive=function(i){
     `<div style="font-size:0.75rem;color:var(--text3);margin-bottom:8px;">${rows.length} pairs · ${bkeys.length} boards played</div>
     <div style="font-weight:600;color:var(--gold);font-size:0.78rem;margin-bottom:6px;">Rankings</div>
     <table class="mv-table"><thead><tr><th>#</th><th>Name</th><th>Dir</th><th>MP</th><th>%</th></tr></thead><tbody>${rowsHTML}</tbody></table>
-    ${boardRowsHTML?'<div style="font-weight:600;color:var(--gold);font-size:0.78rem;margin:10px 0 6px;">Board Results</div><table class="mv-table"><thead><tr><th>Masa/T/B</th><th>NS</th><th>EW</th><th>Contract</th><th>NS Puan</th></tr></thead><tbody>'+boardRowsHTML+'</tbody></table>':''}`,
-    `<button class="btn btn-ghost" onclick="closeModal()">Kapat</button>
+    ${boardRowsHTML?'<div style="font-weight:600;color:var(--gold);font-size:0.78rem;margin:10px 0 6px;">Board Results</div><table class="mv-table"><thead><tr><th>Table/Rnd/B</th><th>NS</th><th>EW</th><th>Contract</th><th>NS Score</th></tr></thead><tbody>'+boardRowsHTML+'</tbody></table>':''}`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Close</button>
      <button class="btn btn-blue btn-sm" onclick="archivePDF(${i})">PDF Export</button>`);
 };
 
@@ -2905,15 +2933,15 @@ window.archivePDF=function(i){
   });
   const st=a.state||{};
   const win=window.open('','_blank');
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${st.name} Sonuclari</title>
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${st.name} Results</title>
   <style>body{font-family:Arial,sans-serif;font-size:11px;margin:16px;color:#222;}h1{font-size:17px;color:#1a237e;margin-bottom:3px;}h2{font-size:12px;color:#1a237e;border-bottom:1px solid #1a237e;padding-bottom:2px;margin:14px 0 5px;}.meta{font-size:10px;color:#666;margin-bottom:12px;}table{width:100%;border-collapse:collapse;margin-bottom:10px;}th{background:#1a237e;color:#fff;padding:4px 7px;text-align:left;font-size:9px;text-transform:uppercase;}td{padding:4px 7px;border-bottom:1px solid #e0e0e0;}</style>
   </head><body>
-  <h1>♠ ${st.name||'Turnuva'}</h1>
-  <div class="meta">${st.tableCount||'?'} masa · ${st.roundCount||'?'} tur · ${st.scoring||'MP'} · Bitis: ${a.finished?new Date(a.finished).toLocaleString('tr-TR'):''}</div>
-  <h2>Genel Rankings</h2>
-  <table><thead><tr><th>#</th><th>Ad Soyad</th><th>Yon</th><th>MP</th><th>%</th></tr></thead><tbody>${rankRows}</tbody></table>
-  <h2>Board Sonuclari (${bkeys.length} board)</h2>
-  <table><thead><tr><th>Masa/Tur/B</th><th>NS</th><th>EW</th><th>Contract</th><th>Ilk Hamle</th><th>NS Puan</th></tr></thead><tbody>${bRows}</tbody></table>
+  <h1>♠ ${st.name||'Tournament'}</h1>
+  <div class="meta">${st.tableCount||'?'} tables · ${st.roundCount||'?'} rounds · ${st.scoring||'MP'} · Finished: ${a.finished?new Date(a.finished).toLocaleString('en-GB'):''}</div>
+  <h2>Overall Rankings</h2>
+  <table><thead><tr><th>#</th><th>Name</th><th>Dir</th><th>MP</th><th>%</th></tr></thead><tbody>${rankRows}</tbody></table>
+  <h2>Board Results (${bkeys.length} boards)</h2>
+  <table><thead><tr><th>Table/Round/B</th><th>NS</th><th>EW</th><th>Contract</th><th>Opening Lead</th><th>NS Score</th></tr></thead><tbody>${bRows}</tbody></table>
   <script>window.onload=function(){window.print();}<\/script>
   </body></html>`);
   win.document.close();
