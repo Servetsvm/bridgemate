@@ -779,18 +779,60 @@ window.doLogin=function(){
     }
   }
   refreshTopbar();
-  // Resume table session if exists
+
+  // For table/screen role: fetch all data from Firebase first, then render
+  if((role==='table'||role==='screen')&&_fbOnlineMode&&_fbDb&&_fbTourneyId){
+    const base='tournaments/'+_fbTourneyId;
+    document.getElementById('panelContent').innerHTML=`
+      <div class="waiting-screen" style="padding:80px 20px;">
+        <div class="waiting-icon">⚡</div>
+        <div class="waiting-title">Connecting to Firebase...</div>
+        <div class="waiting-sub">Loading tournament data</div>
+      </div>`;
+    _fbDb.ref(base).once('value').then(snap=>{
+      const data=snap.val()||{};
+      // Load everything into cache at once
+      ['state','pairs','boards','movements','approvals','archives','logs'].forEach(k=>{
+        if(data[k]!==undefined){
+          _fbCache[k]=data[k];
+          localStorage.setItem('bm_'+k,JSON.stringify(data[k]));
+        }
+      });
+      // Now resume or render
+      if(role==='table'){
+        const sess=localStorage.getItem('bm_tableSession');
+        if(sess){
+          try{
+            const obj=JSON.parse(sess);
+            const age=(Date.now()-obj.ts)/1000/60;
+            if(age<480&&obj.tableNo&&obj.tid===_fbTourneyId){
+              bmTableNo=obj.tableNo;
+              bmSide=obj.side||'ns';
+              const s=getState();
+              if(s&&s.status==='running'){
+                toast('📍 Resuming Table '+obj.tableNo+'...');
+                renderTableDetail(obj.tableNo);
+                return;
+              }
+            }
+          }catch(e){}
+        }
+      }
+      renderPanel();
+    }).catch(()=>renderPanel());
+    return;
+  }
+
+  // Resume table session if exists (offline fallback)
   if(role==='table'){
     const sess=localStorage.getItem('bm_tableSession');
     if(sess){
       try{
         const obj=JSON.parse(sess);
-        const age=(Date.now()-obj.ts)/1000/60; // dakika
+        const age=(Date.now()-obj.ts)/1000/60;
         if(age<480&&obj.tableNo&&obj.tid===_fbTourneyId){
-          // If less than 8 hours old and same tournament
           bmTableNo=obj.tableNo;
           bmSide=obj.side||'ns';
-          // Firebase verisi geldikten sonra render et
           setTimeout(()=>{
             const s=getState();
             if(s&&s.status==='running'){
@@ -954,34 +996,7 @@ window.bmSelectTable=function(){
     }
   }
 
-  // Try to fetch fresh from Firebase first
-  if(_fbOnlineMode&&_fbDb&&_fbTourneyId){
-    const base='tournaments/'+_fbTourneyId;
-    const pairsRef=_fbDb.ref(base+'/pairs');
-    const movRef=_fbDb.ref(base+'/movements');
-    // Show loading indicator
-    document.getElementById('panelContent').innerHTML=`
-      <div class="waiting-screen" style="padding:60px 20px;">
-        <div class="waiting-icon">⏳</div>
-        <div class="waiting-title">Loading...</div>
-      </div>`;
-    Promise.all([
-      pairsRef.once('value').then(s=>s.val()||{}),
-      movRef.once('value').then(s=>s.val()||{})
-    ]).then(([pairs,movements])=>{
-      // Update cache
-      _fbCache['pairs']=pairs;
-      _fbCache['movements']=movements;
-      localStorage.setItem('bm_pairs',JSON.stringify(pairs));
-      localStorage.setItem('bm_movements',JSON.stringify(movements));
-      proceed(pairs,movements);
-    }).catch(()=>{
-      // Fallback to cache
-      proceed(getPairs(),getMovements());
-    });
-  } else {
-    proceed(getPairs(),getMovements());
-  }
+  proceed(getPairs(),getMovements());
 };
 
 // Show loaded name with option to confirm or re-enter
@@ -1075,6 +1090,7 @@ window.bmSaveNameAndGo=function(tableNo,pairKey){
 function renderTableDetail(tableNo){
   const s=getState();
   const movements=getMovements();const boards=getBoards();
+  const pairs=getPairs();
   const mk=s.currentRound+'_'+tableNo;
   const m=movements[mk]||{};
 
@@ -1169,17 +1185,7 @@ function renderTableDetail(tableNo){
   }
   } // end doRender
 
-  // Fetch pairs fresh from Firebase, then render
-  if(_fbOnlineMode&&_fbDb&&_fbTourneyId){
-    _fbDb.ref('tournaments/'+_fbTourneyId+'/pairs').once('value').then(snap=>{
-      const fresh=snap.val()||{};
-      _fbCache['pairs']=fresh;
-      localStorage.setItem('bm_pairs',JSON.stringify(fresh));
-      doRender(fresh);
-    }).catch(()=>doRender(getPairs()));
-  } else {
-    doRender(getPairs());
-  }
+  doRender(pairs);
 }
 
 function bmPollApprovals(tableNo){
