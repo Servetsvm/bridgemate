@@ -2128,8 +2128,8 @@ function _renderTableDetail(tableNo){
       <div class="bi-num">Board ${b} <span class="vul-badge vul-${vuln.toLowerCase().replace(' ','')}">${vuln}</span></div>
       <div class="bi-contract">${contract||''}</div>
       ${isDone?`<div class="bi-score" style="color:${scoreColor};">${score}</div>`:''}
-      ${isPending?`<div style="color:var(--gold);font-size:0.72rem;">⏳ Onay bekleniyor</div>`:''}
-      ${!isDone&&!isPending?`<div style="color:var(--text3);font-size:0.72rem;">→ Gir</div>`:''}
+      ${isPending?`<div style="color:var(--gold);font-size:0.72rem;">⏳ Awaiting approval</div>`:''}
+      ${!isDone&&!isPending?`<div style="color:var(--text3);font-size:0.72rem;">→ Enter</div>`:''}
       ${bd?.adjusted?`<span class="adj-badge">ADJ</span>`:''}
     </div>`;
   }).join('');
@@ -2145,7 +2145,7 @@ function _renderTableDetail(tableNo){
     ${isPhantom?`<div class="director-bar">👻 Phantom pair — Average awarded</div>`:''}
     <div id="boardsList">${boardsHtml}</div>
     <div style="display:flex;gap:6px;margin-top:10px;">
-      <button class="btn btn-ghost btn-sm" onclick="bmTableNo=null;bmEntry={};renderTablePanel()">← Masalar</button>
+      <button class="btn btn-ghost btn-sm" onclick="bmTableNo=null;bmEntry={};renderTablePanel()">← Tables</button>
     </div>
   </div>`;
   checkBroadcast();
@@ -2178,7 +2178,7 @@ function _renderPhantomBoardList(tableNo,s,m,boardList){
     <div class="director-bar">👻 Phantom pair — Average verin</div>
     <div>${boardsHtml}</div>
     <div style="margin-top:10px;">
-      <button class="btn btn-ghost btn-sm" onclick="bmTableNo=null;renderTablePanel()">← Masalar</button>
+      <button class="btn btn-ghost btn-sm" onclick="bmTableNo=null;renderTablePanel()">← Tables</button>
     </div>
   </div>`;
 }
@@ -2192,14 +2192,14 @@ function _renderRoundOverScreen(tableNo,s,movements,pairs,boardList){
     <div class="bm-device">
       <div class="bm-lcd">
         <div class="bm-lcd-row inv">TOURNAMENT COMPLETE   </div>
-        <div class="bm-lcd-row">TUM TURLER TAMAMLANDI </div>
-        <div class="bm-lcd-row">SONUCLARI GORUNTULE   </div>
-        <div class="bm-lcd-row dim">Tesekkurler!          </div>
+        <div class="bm-lcd-row">ALL ROUNDS COMPLETED  </div>
+        <div class="bm-lcd-row">VIEW RESULTS          </div>
+        <div class="bm-lcd-row dim">Thank you!            </div>
       </div>
       <div class="round-over-screen">
         <div class="ro-badge">🏁</div>
-        <div class="ro-title">Turnuva Tamamlandı!</div>
-        <div class="ro-sub">Tüm turlar oynandı</div>
+        <div class="ro-title">Tournament Complete!</div>
+        <div class="ro-sub">All rounds have been played</div>
         <button class="btn btn-gold btn-full" onclick="bmViewScoreboard()" style="margin-top:12px;">🏆 Sonuçları Gör</button>
       </div>
     </div>`;
@@ -2224,31 +2224,31 @@ function _renderRoundOverScreen(tableNo,s,movements,pairs,boardList){
     if(bmSide==='ew'&&nm.ew===myM.ew){myNextTable=t;myNextRole='EW';break;}
   }
 
-  const stayOrMove=myNextTable===tableNo?'Bu masada kalıyorsunuz':'<b>Masa '+myNextTable+"'e gidiniz</b>";
+  const stayOrMove=myNextTable===tableNo?'Stay at this table':'<b>Please move to Table '+myNextTable+'</b>';
 
   document.getElementById('panelContent').innerHTML=`
   <div class="bm-device">
     <div class="bm-lcd">
-      <div class="bm-lcd-row inv">TUR ${String(s.currentRound).padStart(2,' ')} BITTI!            </div>
-      <div class="bm-lcd-row">TUM BOARD TAMAMLANDI  </div>
-      <div class="bm-lcd-row">SONRAKI: MASA ${String(myNextTable).padStart(2,' ')}         </div>
-      <div class="bm-lcd-row blink">ADMIN ONAYINI BEKLE   </div>
+      <div class="bm-lcd-row inv">RND ${String(s.currentRound).padStart(2,' ')} COMPLETE!          </div>
+      <div class="bm-lcd-row">ALL BOARDS ENTERED    </div>
+      <div class="bm-lcd-row">NEXT: TABLE ${String(myNextTable).padStart(2,' ')}         </div>
+      <div class="bm-lcd-row blink">WAIT FOR ADMIN        </div>
     </div>
     <div class="round-over-screen">
       <div class="ro-badge">🎉</div>
-      <div class="ro-title">Tur ${s.currentRound} Tamamlandı!</div>
-      <div class="ro-sub">Tüm ${boardList.length} board girildi</div>
+      <div class="ro-title">Round ${s.currentRound} Complete!</div>
+      <div class="ro-sub">All ${boardList.length} boards entered</div>
 
       <div class="ro-move-card" style="text-align:center;margin:12px 0;">
-        <div class="ro-move-label">Hareketi</div>
+        <div class="ro-move-label">Movement</div>
         <div class="ro-move-main" style="font-size:1.1rem;">${stayOrMove}</div>
         <div class="ro-move-sub" style="margin-top:4px;">${myNextRole||bmSide.toUpperCase()} olarak · Boards ${nextM.boardStart||'?'}–${nextM.boardEnd||'?'}</div>
       </div>
 
       <button class="btn btn-gold btn-full" id="btnMoveOk" onclick="bmRoundMoveOK(${tableNo},${nextRound},${myNextTable})" style="margin-bottom:8px;">
-        ✅ Tamam — Anladım
+        ✅ OK — Got It
       </button>
-      <button class="btn btn-ghost btn-full btn-sm" onclick="bmViewScoreboard()">📊 Skor Tablosu</button>
+      <button class="btn btn-ghost btn-full btn-sm" onclick="bmViewScoreboard()">📊 Scoreboard</button>
     </div>
   </div>`;
 }
@@ -2259,16 +2259,16 @@ window.bmRoundMoveOK=function(oldTable,nextRound,nextTable){
   document.getElementById('panelContent').innerHTML=`
   <div class="bm-device">
     <div class="bm-lcd">
-      <div class="bm-lcd-row inv">TUR ${String(nextRound).padStart(2,' ')} HAZIR              </div>
-      <div class="bm-lcd-row">MASA ${String(nextTable).padStart(2,' ')} BEKLIYORSUNUZ     </div>
-      <div class="bm-lcd-row blink">ADMIN BASLAMAYI BEKLE </div>
+      <div class="bm-lcd-row inv">RND ${String(nextRound).padStart(2,' ')} READY               </div>
+      <div class="bm-lcd-row">TABLE ${String(nextTable).padStart(2,' ')} STANDING BY      </div>
+      <div class="bm-lcd-row blink">WAIT FOR ADMIN START  </div>
       <div class="bm-lcd-row dim">                      </div>
     </div>
     <div class="waiting-screen">
       <div class="waiting-icon" style="font-size:2.5rem;animation:pulse 2s infinite;">⏳</div>
-      <div class="waiting-title">Tur ${nextRound} Bekleniyor</div>
-      <div class="waiting-sub">Admin turu başlatana kadar bekleyin</div>
-      <div style="margin-top:16px;font-size:0.78rem;color:var(--text3);">Masa ${nextTable} · ${bmSide.toUpperCase()}</div>
+      <div class="waiting-title">Round ${nextRound} — Waiting</div>
+      <div class="waiting-sub">Please wait until admin starts the next round</div>
+      <div style="margin-top:16px;font-size:0.78rem;color:var(--text3);">Table ${nextTable} · ${bmSide.toUpperCase()}</div>
     </div>
   </div>`;
 
@@ -2303,13 +2303,13 @@ window.bmShowNewOpponents=function(tableNo,round){
   document.getElementById('panelContent').innerHTML=`
   <div class="bm-device">
     <div class="bm-lcd">
-      <div class="bm-lcd-row inv">TUR ${String(round).padStart(2,' ')} BASLADI!           </div>
+      <div class="bm-lcd-row inv">RND ${String(round).padStart(2,' ')} STARTED!           </div>
       <div class="bm-lcd-row">MASA ${String(tableNo).padStart(2,' ')}                   </div>
       <div class="bm-lcd-row">N${nsNum.padEnd(2,' ')}:${nsPair.name.slice(0,17).padEnd(17)}</div>
       <div class="bm-lcd-row">E${ewNum.padEnd(2,' ')}:${ewPair.name.slice(0,17).padEnd(17)}</div>
     </div>
     <div class="card">
-      <div class="card-title"><span>🎯</span> Tur ${round} — Masa ${tableNo}</div>
+      <div class="card-title"><span>🎯</span> Round ${round} — Table ${tableNo}</div>
       <div class="pair-confirm">
         <div class="pair-box pair-box-ns">
           <div class="pb-label">NS</div>
@@ -2326,10 +2326,10 @@ window.bmShowNewOpponents=function(tableNo,round){
         Boards <b>${m.boardStart||'?'}</b> – <b>${m.boardEnd||'?'}</b> · ${s.scoring}
       </div>
       <div style="font-size:0.75rem;color:var(--text3);text-align:center;margin-bottom:12px;">
-        Rakipler doğru mu? Onaylayın ve oynamaya başlayın.
+        Are opponents correct? Confirm and start playing.
       </div>
       <button class="btn btn-green btn-full" onclick="bmLockTable(${tableNo},'${bmSide==='ns'?m.ns:m.ew}')">
-        ✅ Tamam — Oynamaya Başla
+        ✅ OK — Start Playing
       </button>
     </div>
   </div>`;
@@ -2613,16 +2613,16 @@ function bmShowApprovalWait(tableNo,boardNo,contract,nsScore){
   document.getElementById('panelContent').innerHTML=`
   <div class="bm-device">
     <div class="bm-lcd">
-      <div class="bm-lcd-row inv">BOARD ${String(boardNo).padStart(2,' ')} GIRILDI          </div>
+      <div class="bm-lcd-row inv">BOARD ${String(boardNo).padStart(2,' ')} ENTERED           </div>
       <div class="bm-lcd-row">${(contract||'').padEnd(20)}</div>
-      <div class="bm-lcd-row">NS SKOR: ${scoreDisp.padEnd(11)}</div>
-      <div class="bm-lcd-row blink">RAKIP ONAYINI BEKLE   </div>
+      <div class="bm-lcd-row">NS SCORE: ${scoreDisp.padEnd(10)}</div>
+      <div class="bm-lcd-row blink">WAIT FOR OPP CONFIRM  </div>
     </div>
     <div class="approval-screen">
-      <div class="approval-title">Rakip onaylaması bekleniyor (${bmSide==='ns'?'EW':'NS'})</div>
+      <div class="approval-title">Waiting for opponent approval (${bmSide==='ns'?'EW':'NS'})</div>
       <div class="approval-contract">${contract||''}</div>
       <div class="approval-score" style="color:${nsScore>0?'var(--green)':nsScore<0?'var(--red)':'var(--text)'};">${scoreDisp}</div>
-      <div class="approval-waiting">⏳ Rakip onaylıyor...</div>
+      <div class="approval-waiting">⏳ Opponent confirming...</div>
     </div>
   </div>`;
 
@@ -2667,19 +2667,19 @@ function bmShowApprovalRequest(tableNo,boardNo,boardKey,bd){
   document.getElementById('panelContent').innerHTML=`
   <div class="bm-device">
     <div class="bm-lcd">
-      <div class="bm-lcd-row inv">ONAY GEREKLI          </div>
+      <div class="bm-lcd-row inv">CONFIRMATION NEEDED   </div>
       <div class="bm-lcd-row">BOARD ${String(boardNo).padStart(2,' ')}: ${(bd.contract||'').slice(0,12).padEnd(12)}</div>
-      <div class="bm-lcd-row">NS SKOR: ${scoreDisp.padEnd(11)}</div>
-      <div class="bm-lcd-row blink">ONAYLAMAK ICIN BASIN  </div>
+      <div class="bm-lcd-row">NS SCORE: ${scoreDisp.padEnd(10)}</div>
+      <div class="bm-lcd-row blink">PRESS TO CONFIRM      </div>
     </div>
     <div class="approval-screen">
-      <div class="approval-title">⚠️ Onay Gerekiyor — Board ${boardNo}</div>
+      <div class="approval-title">⚠️ Confirmation Required — Board ${boardNo}</div>
       <div class="approval-contract">${bd.contract||''}</div>
-      <div style="font-size:0.75rem;color:var(--text2);margin-bottom:6px;">Açılış: ${bd.lead||'—'}</div>
+      <div style="font-size:0.75rem;color:var(--text2);margin-bottom:6px;">Lead: ${bd.lead||'—'}</div>
       <div class="approval-score" style="color:${nsScore>0?'var(--green)':nsScore<0?'var(--red)':'var(--text)'};">${scoreDisp}</div>
       <div style="display:flex;gap:8px;">
-        <button class="btn btn-red btn-full" onclick="bmRejectBoard('${boardKey}',${tableNo})">❌ Yanlış</button>
-        <button class="btn btn-green btn-full" onclick="bmApproveBoard('${boardKey}',${tableNo})">✅ Onayla</button>
+        <button class="btn btn-red btn-full" onclick="bmRejectBoard('${boardKey}',${tableNo})">❌ Incorrect</button>
+        <button class="btn btn-green btn-full" onclick="bmApproveBoard('${boardKey}',${tableNo})">✅ Confirm</button>
       </div>
     </div>
   </div>`;
@@ -2699,7 +2699,7 @@ window.bmApproveBoard=function(boardKey,tableNo){
   setApprovals(appr);
   addLog('ok','Board approved',boardKey);
   playSound('ok');
-  toast('✅ Onaylandı!');
+  toast('✅ Confirmed!');
   const[t,r,b]=boardKey.split('_');
   const bd=getBoards()[boardKey];
   bmShowBoardResult(tableNo,parseInt(b),bd);
@@ -2714,7 +2714,7 @@ window.bmRejectBoard=function(boardKey,tableNo){
   delete appr[myKey];
   setApprovals(appr);
   addLog('warn','Board rejected',boardKey);
-  toast('⚠️ Skor reddedildi — tekrar girin');
+  toast('⚠️ Score rejected — please re-enter');
   renderTableDetail(tableNo);
 };
 
@@ -2746,34 +2746,34 @@ window.bmShowBoardResult=function(tableNo,boardNo,bd){
 
   const otherHtml=results.length>0?`
   <div class="card" style="margin-top:10px;">
-    <div class="card-title"><span>📊</span> Diğer Masalar — Board ${boardNo}</div>
+    <div class="card-title"><span>📊</span> Other Tables — Board ${boardNo}</div>
     <table class="traveller-table">
-      <thead><tr><th>Masa</th><th>Kontrakt</th><th>NS Skor</th></tr></thead>
+      <thead><tr><th>Table</th><th>Contract</th><th>NS Score</th></tr></thead>
       <tbody>${allResults.map(r=>`<tr ${r.isMe?'class="highlight"':''}>
         <td style="font-size:0.75rem;">${r.isMe?'★ '+tableNo:r.table}</td>
         <td style="font-family:\'Share Tech Mono\',monospace;font-size:0.75rem;">${r.contract||'—'}</td>
         <td style="font-weight:700;color:${r.nsScore>0?'var(--green)':r.nsScore<0?'var(--red)':'var(--text)'};">${typeof r.nsScore==='number'?(r.nsScore>0?'+':'')+r.nsScore:'⏳'}</td>
       </tr>`).join('')}</tbody>
     </table>
-  </div>`:`<div style="font-size:0.78rem;color:var(--text3);text-align:center;margin-top:10px;padding:10px;">Diğer masalar henüz tamamlamadı</div>`;
+  </div>`:`<div style="font-size:0.78rem;color:var(--text3);text-align:center;margin-top:10px;padding:10px;">Other tables have not finished yet</div>`;
 
   const nextBtnHtml=nextBoard
     ?`<button class="btn btn-gold btn-full" onclick="bmOpenBoard(${tableNo},${nextBoard})" style="margin-top:12px;">▶ Board ${nextBoard}'e Geç</button>`
-    :`<button class="btn btn-green btn-full" onclick="renderTableDetail(${tableNo})" style="margin-top:12px;">✅ Tur Özeti</button>`;
+    :`<button class="btn btn-green btn-full" onclick="renderTableDetail(${tableNo})" style="margin-top:12px;">✅ Round Summary</button>`;
 
   document.getElementById('panelContent').innerHTML=`
   <div class="bm-device">
     <div class="bm-lcd">
-      <div class="bm-lcd-row inv">BOARD ${String(boardNo).padStart(2,' ')} ONAYLANDI         </div>
+      <div class="bm-lcd-row inv">BOARD ${String(boardNo).padStart(2,' ')} CONFIRMED         </div>
       <div class="bm-lcd-row">${(bd.contract||'').padEnd(20)}</div>
-      <div class="bm-lcd-row">NS SKOR: ${scoreDisp.padEnd(11)}</div>
+      <div class="bm-lcd-row">NS SCORE: ${scoreDisp.padEnd(10)}</div>
       <div class="bm-lcd-row dim">                      </div>
     </div>
     <div style="text-align:center;padding:16px 0 8px;">
-      <div style="font-size:0.72rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Board ${boardNo} Sonucu</div>
+      <div style="font-size:0.72rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Board ${boardNo} Result</div>
       <div style="font-family:\'Share Tech Mono\',monospace;font-size:1.1rem;margin-bottom:4px;">${bd.contract||'—'}</div>
       <div style="font-size:2.2rem;font-weight:900;font-family:\'Playfair Display\',serif;color:${scoreColor};">${scoreDisp}</div>
-      <div style="font-size:0.72rem;color:var(--text3);">NS Skoru</div>
+      <div style="font-size:0.72rem;color:var(--text3);">NS Score</div>
     </div>
     ${otherHtml}
     ${nextBtnHtml}
