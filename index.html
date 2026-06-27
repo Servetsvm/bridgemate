@@ -380,7 +380,7 @@ const FIREBASE_CONFIG = {
 };
 
 // ══════════════════════════════════════════════════════
-//  DATA LAYER — Firebase Realtime DB + localStorage fallback
+//  DATA LAYER — Firebase Realtime DB (localStorage as write-through cache)
 // ══════════════════════════════════════════════════════
 
 // ── Firebase state ──
@@ -461,7 +461,7 @@ function fbSubscribe(key){
   _fbListeners[key]=ref.on('value',snap=>{
     const val=snap.val();
     _fbCache[key]=val;
-    // Also sync to localStorage for offline fallback
+    // Also write to localStorage as local cache
     if(val!==null&&val!==undefined){
       localStorage.setItem('bm_'+key,JSON.stringify(val));
     }
@@ -1103,7 +1103,7 @@ function renderTableDetail(tableNo){
       </div>
     </div>`;
 
-  // Auto-poll for approvals (offline fallback; Firebase handles online sync)
+  // Auto-poll for approvals (Firebase handles sync; poll as backup)
   if(bmPollInterval)clearInterval(bmPollInterval);
   if(!_fbOnlineMode){
     bmPollInterval=setInterval(()=>bmPollApprovals(tableNo),1500);
@@ -1563,7 +1563,7 @@ function renderApprovalWaiting(boardNo,boardData,key){
       </div>
     </div>`;
 
-  // Firebase online: listener handles approval — poll only in offline mode
+  // Firebase listener handles approval — poll as backup
   if(bmPollInterval)clearInterval(bmPollInterval);
   let _approved=false;
   function checkApproval(){
@@ -2186,8 +2186,8 @@ window.fbDisconnect=function(){
   const dot=document.getElementById('fbStatusDot');
   const txt=document.getElementById('fbStatusTxt');
   if(dot)dot.style.background='var(--text3)';
-  if(txt)txt.textContent='Offline';
-  toast('Firebase disconnected — local mode active');
+  if(txt)txt.textContent='Disconnected';
+  toast('Firebase disconnected.');
   closeModal();
 };
 
@@ -2229,8 +2229,10 @@ window.fbSyncStart=function(){
 window.fbSyncCancel=function(){
   _fbSubscribePending=false;
   _adminSetupBusy=false;
+  // Still subscribe to Firebase even when cancelled — just without waiting
+  ['state','pairs','boards','movements','approvals','archives','logs'].forEach(k=>fbSubscribe(k));
   const b=document.getElementById('fbSyncBanner');if(b)b.remove();
-  toast('Firebase sync cancelled — local mode only');
+  toast('Firebase sync started (immediate).');
 };
 
 let adminTab='setup';
@@ -2343,7 +2345,7 @@ function renderSetup(){
       <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
         <div style="display:inline-flex;align-items:center;gap:5px;font-size:0.75rem;">
           <span id="fbStatusDot2" style="width:8px;height:8px;border-radius:50%;background:${_fbOnlineMode?'var(--green)':'var(--text3)'};"></span>
-          <span style="color:var(--text2);">${_fbOnlineMode?('Active • '+(_fbTourneyId||'')):'Not connected'}</span>
+          <span style="color:var(--text2);">${_fbOnlineMode?('Active • '+(_fbTourneyId||'')):'Disconnected'}</span>
         </div>
         <button class="btn btn-gold btn-sm" onclick="showFirebasePanel()">⚙️ Settings</button>
         <button class="btn btn-blue btn-sm" onclick="showQR()">📱 QR Kod</button>
