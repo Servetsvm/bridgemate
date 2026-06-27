@@ -1889,12 +1889,18 @@ window.showQR=function(){
     setTimeout(()=>{
       if(_fbOnlineMode){
         ['state','pairs','boards','movements','approvals','archives','logs'].forEach(k=>fbSubscribe(k));
-        // Arrived via QR — select Table tab, show table number entry
-        _qrJoinMode=true;
-        selRole('table');
-        toast('📱 Connected to tournament: '+tid);
+        // Wait for Firebase data then go directly to table panel (bypass login)
+        setTimeout(()=>{
+          role='table';
+          document.getElementById('loginScreen').style.display='none';
+          document.getElementById('app').style.display='flex';
+          document.getElementById('topbarRole').textContent='Table';
+          refreshTopbar();
+          toast('📱 Connected: '+tid);
+          renderPanel();
+        },1200);
       }
-    },1200);
+    },300);
   }
 })();
 
@@ -2330,10 +2336,16 @@ function renderSetup(){
 window.adminUpdateCalc=function(){
   const players=parseInt(document.getElementById('aPlayers')?.value||0);
   const totalB=parseInt(document.getElementById('aTotalBoards')?.value||24);
-  const bpr=parseInt(document.getElementById('aBPR')?.value||3);
   const tables=Math.floor(players/4);
   const hasPhantom=players%4!==0;
   const rounds=tables||8;
+  // Auto-calculate boards per round from total boards / rounds
+  let bpr=3;
+  if(rounds>0&&totalB>0){
+    bpr=Math.max(1,Math.min(8,Math.round(totalB/rounds)));
+  }
+  const bprEl=document.getElementById('aBPR');
+  if(bprEl)bprEl.value=bpr;
   const hint=document.getElementById('calcHint');
   const bprHint=document.getElementById('bprHint');
   if(hint)hint.textContent=`→ ${tables} tables${hasPhantom?' + phantom pair':''}`;
@@ -2343,18 +2355,18 @@ window.adminUpdateCalc=function(){
 let _adminSetupBusy=false;
 window.adminSetup=function(){
   if(_adminSetupBusy)return;
+  // Read ALL form values FIRST before any DOM changes
+  const players=parseInt(document.getElementById('aPlayers')?.value||0);
+  const totalBoards=parseInt(document.getElementById('aTotalBoards')?.value||24);
+  const bpr=parseInt(document.getElementById('aBPR')?.value||3);
+  const scoring=document.getElementById('aScoring')?.value||'MP';
+  const mov=document.getElementById('aMovement')?.value||'mitchell';
   _adminSetupBusy=true;
   setTimeout(()=>_adminSetupBusy=false,2000);
   const now=new Date();
   const pad=n=>String(n).padStart(2,'0');
   const autoName=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate())+'_'+pad(now.getHours())+pad(now.getMinutes());
-  document.getElementById('aName').value=autoName;
   const name=autoName;
-  const players=parseInt(document.getElementById('aPlayers').value);
-  const totalBoards=parseInt(document.getElementById('aTotalBoards').value);
-  const bpr=parseInt(document.getElementById('aBPR').value);
-  const scoring=document.getElementById('aScoring').value;
-  const mov=document.getElementById('aMovement').value;
   if(isNaN(players)||players<4){toast('❌ Min 4 players');_adminSetupBusy=false;return;}
   if(isNaN(totalBoards)||totalBoards<4){toast('❌ Min 4 boards');_adminSetupBusy=false;return;}
   if(isNaN(bpr)||bpr<1||bpr>8){toast('❌ Boards/round: 1-8');_adminSetupBusy=false;return;}
