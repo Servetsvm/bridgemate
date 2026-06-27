@@ -530,14 +530,55 @@ selRole('admin');
 window.doLogin=function(){
   const err=document.getElementById('loginErr');err.textContent='';
   const pw=document.getElementById('pwInput').value;
-  if(role==='admin'&&pw!==PASS.admin){err.textContent='❌ Wrong password';return;}
-  if(role==='table'&&pw!==PASS.table){err.textContent='❌ Wrong password';return;}
+  if(role==='admin'&&pw!==PASS.admin){err.textContent='❌ Yanlis sifre';return;}
+  if(role==='table'&&pw!==PASS.table){err.textContent='❌ Yanlis sifre';return;}
+  if(role==='admin'){
+    const snap=localStorage.getItem('bm_adminSessionSnap');
+    const st=DB.get('state');
+    if(snap&&st&&st.status==='running'){
+      // Ask user: new or continue
+      document.getElementById('loginScreen').style.display='none';
+      document.getElementById('app').style.display='flex';
+      document.getElementById('topbarRole').textContent='Admin';
+      refreshTopbar();
+      document.getElementById('panelContent').innerHTML=`
+        <div style="max-width:420px;margin:40px auto;padding:0 14px;">
+          <div class="card" style="text-align:center;border-color:var(--gold);">
+            <div style="font-size:2rem;margin-bottom:10px;">⚠️</div>
+            <div style="font-size:1rem;font-weight:700;color:var(--gold);margin-bottom:6px;">Kaydedilmis turnuva bulundu</div>
+            <div style="font-size:0.82rem;color:var(--text2);margin-bottom:18px;">${st.name}</div>
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-green btn-full" onclick="sessionContinue()">&#x25b6; Devam Et</button>
+              <button class="btn btn-red btn-full" onclick="sessionNew()">&#x2795; Yeni Turnuva</button>
+            </div>
+          </div>
+        </div>`;
+      return;
+    }
+  }
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('app').style.display='flex';
   document.getElementById('topbarRole').textContent=role==='admin'?'Admin':role==='table'?'Table':'Screen';
   refreshTopbar();renderPanel();
 };
+window.sessionContinue=function(){renderAdminPanel();};
+window.sessionNew=function(){
+  if(!confirm('Mevcut turnuva silinecek. Emin misiniz?'))return;
+  ['state','pairs','boards','movements','logs','approvals'].forEach(k=>DB.del(k));
+  localStorage.removeItem('bm_adminSessionSnap');
+  renderAdminPanel();
+};
 window.doLogout=function(){
+  if(role==='admin'){
+    const st=DB.get('state');
+    if(st&&st.status==='running'){
+      // Save snapshot for session restore
+      localStorage.setItem('bm_adminSessionSnap','1');
+      if(!confirm('Admin sayfasindan cikiyorsunuz.\n\nYedek almak ister misiniz?\n(Iptal: Yedek al, Tamam: Devam)')){
+        adminExport();
+      }
+    }
+  }
   document.getElementById('app').style.display='none';
   document.getElementById('loginScreen').style.display='flex';
   selRole('admin');
@@ -545,8 +586,10 @@ window.doLogout=function(){
 };
 function refreshTopbar(){
   const s=getState();const el=document.getElementById('topbarRound');
-  if(s.currentRound>0){el.style.display='inline-flex';el.textContent=`Round ${s.currentRound}/${s.roundCount}`;}
-  else el.style.display='none';
+  if(s.currentRound>0){
+    el.style.display='inline-flex';
+    el.textContent='Tur '+s.currentRound+'/'+s.roundCount+(s.name?' · '+s.name:'');
+  } else el.style.display='none';
 }
 
 // ══════════════════════════════════════════════════════
@@ -644,31 +687,35 @@ function renderTableDetail(tableNo){
   const lcdLine1=`RND ${String(s.currentRound).padStart(2,' ')}  NS:${nsNum.padStart(2,' ')} EW:${ewNum.padStart(2,' ')} B${m.boardStart||'?'}-${m.boardEnd||'?'}`;
 
   const approvals=getApprovals();
-  const boardsHTML=boardList.map(bl=>{
+  // Find the next (first un-done) board to play
+  const nextBoard=boardList.find(bl=>!(bl.data&&bl.data.status==='done'));
+  const approvalPending=boardList.find(bl=>{
     const apk=tableNo+'_'+s.currentRound+'_'+bl.boardNo;
     const ap=approvals[apk];
-    let statusHTML='';let btnHTML='';
-    if(bl.data&&bl.data.status==='done'){
-      statusHTML=`<span class="bi-score" style="color:${typeof bl.data.nsScore==='number'?(bl.data.nsScore>=0?'var(--green)':'var(--red)'):'var(--purple)'};">${typeof bl.data.nsScore==='number'?(bl.data.nsScore>0?'+':'')+bl.data.nsScore:bl.data.nsScore}</span>`;
-      btnHTML=`<button class="btn btn-ghost btn-sm" onclick="bmEnterBoard(${bl.boardNo})">✏️</button>`;
-    } else if(ap&&ap.status==='pending'){
-      statusHTML=`<span style="font-size:0.72rem;color:var(--gold);">⏳ Awaiting</span>`;
-      if(bmSide!==ap.side){
-        btnHTML=`<button class="btn btn-green btn-sm" onclick="bmApproveScore('${apk}')">✅ OK</button>`;
-      } else {
-        btnHTML=`<button class="btn btn-red btn-sm" onclick="bmCancelApproval('${apk}')">✕</button>`;
-      }
-    } else {
-      statusHTML=`<span style="font-size:0.78rem;color:var(--text3);">—</span>`;
-      btnHTML=`<button class="btn btn-gold btn-sm" onclick="bmEnterBoard(${bl.boardNo})">Enter</button>`;
-    }
-    return`<div class="board-item ${bl.data&&bl.data.status==='done'?'done':ap&&ap.status==='pending'?'pending':''}">
-      <span class="bi-num">Board ${bl.boardNo}</span>
-      <span class="bi-contract">${bl.data?(bl.data.adjusted?'<span class="adj-badge">ADJ</span> ':'')+bl.data.contract:ap&&ap.contract?ap.contract:'—'}</span>
-      ${statusHTML}
-      ${btnHTML}
+    return ap&&ap.status==='pending';
+  });
+
+  let boardsHTML='';
+  if(approvalPending){
+    const apk=tableNo+'_'+s.currentRound+'_'+approvalPending.boardNo;
+    const ap=approvals[apk];
+    boardsHTML=`<div class="board-item pending">
+      <span class="bi-num">Board ${approvalPending.boardNo}</span>
+      <span class="bi-contract">${ap.contract||'—'}</span>
+      <span style="font-size:0.72rem;color:var(--gold);">⏳ Onay bekleniyor</span>
+      ${bmSide!==ap.side
+        ?`<button class="btn btn-green btn-sm" onclick="bmApproveScore('${apk}')">✅ OK</button>`
+        :`<button class="btn btn-red btn-sm" onclick="bmCancelApproval('${apk}')">✕</button>`}
     </div>`;
-  }).join('');
+  } else if(nextBoard){
+    boardsHTML=`<div class="board-item pending" style="border-color:var(--gold);cursor:pointer;" onclick="bmEnterBoard(${nextBoard.boardNo})">
+      <span class="bi-num" style="color:var(--gold);font-size:1rem;">Board ${nextBoard.boardNo}</span>
+      <span class="bi-contract" style="color:var(--text2);font-size:0.8rem;">${totalBoards} boarddan ${doneCount+1}. sıra</span>
+      <span style="font-size:0.78rem;color:var(--text3);"></span>
+      <button class="btn btn-gold btn-sm" onclick="event.stopPropagation();bmEnterBoard(${nextBoard.boardNo})">Enter ↵</button>
+    </div>`;
+  }
+  const boardsHTMLunused='';
 
   const allDone=doneCount===totalBoards&&totalBoards>0;
   let actionHTML='';
@@ -697,7 +744,7 @@ function renderTableDetail(tableNo){
       </div>
       <div id="boardsSection">
         <div class="card">
-          <div class="card-title"><span>🃏</span> Boards this round</div>
+          <div class="card-title"><span>🃏</span> ${allDone?'Tum Boardlar Tamamlandi ✓':nextBoard?'Siradaki Board: '+nextBoard.boardNo:approvalPending?'Onay Bekleniyor...':'Hazir'}</div>
           <div id="boardsList">${boardsHTML}</div>
           ${isPhantom?`<div style="margin-top:8px;text-align:center;font-size:0.8rem;color:var(--purple);">👻 Phantom pair — sit out</div>`:''}
         </div>
@@ -1099,51 +1146,89 @@ window.saveBoardAndSendApproval=function(boardNo){
   renderApprovalWaiting(boardNo,boardData,key);
 };
 
+function getOtherTablesSameBoard(boardNo,myTableNo,myRound){
+  const boards=getBoards();const movements=getMovements();const pairs=getPairs();
+  const results=[];
+  Object.entries(movements).forEach(([mk,m])=>{
+    const parts=mk.split('_');if(parts.length!==2)return;
+    const r=parseInt(parts[0]);const t=parseInt(parts[1]);
+    if(r!==myRound||t===myTableNo)return;
+    if(boardNo>=m.boardStart&&boardNo<=m.boardEnd){
+      const bkey=t+'_'+r+'_'+boardNo;
+      const bd=boards[bkey];
+      if(bd&&bd.status==='done'&&typeof bd.nsScore==='number'){
+        const ns=pairs[m.ns]||{name:m.ns||'?'};
+        const ew=pairs[m.ew]||{name:m.ew||'?'};
+        results.push({table:t,ns:ns.name,ew:ew.name,nsScore:bd.nsScore,contract:bd.contract||'?'});
+      }
+    }
+  });
+  return results;
+}
+
 function renderApprovalWaiting(boardNo,boardData,key){
   const s=getState();
   const nsScore=boardData.nsScore;
   const scoreStr=typeof nsScore==='number'?(nsScore>0?'+':'')+nsScore:'PASS';
   const scoreColor=typeof nsScore==='number'?(nsScore>0?'var(--green)':nsScore<0?'var(--red)':'var(--gold)'):'var(--gold)';
 
+  function buildOtherHTML(){
+    const others=getOtherTablesSameBoard(boardNo,bmTableNo,s.currentRound);
+    if(!others.length)return '<div style="font-size:0.75rem;color:var(--text3);margin-top:8px;text-align:center;">Diger masalar henuz oynamadi</div>';
+    let h='<div style="margin-top:10px;"><div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Ayni board — Diger masalar</div>';
+    others.forEach(function(o){
+      const sc=o.nsScore>0?'var(--green)':o.nsScore<0?'var(--red)':'var(--gold)';
+      h+='<div style="display:flex;justify-content:space-between;align-items:center;background:var(--surface2);border-radius:6px;padding:6px 10px;margin-bottom:4px;font-size:0.78rem;">'
+        +'<span style="color:var(--text3);">Masa '+o.table+'</span>'
+        +'<span style="font-family:\'Share Tech Mono\',monospace;">'+o.contract+'</span>'
+        +'<span style="font-weight:700;color:'+sc+';">'+(o.nsScore>0?'+':'')+o.nsScore+'</span>'
+        +'</div>';
+    });
+    return h+'</div>';
+  }
+  const otherTablesHTML=buildOtherHTML();
   document.getElementById('panelContent').innerHTML=`
     <div class="bm-device" style="max-width:360px;">
       <div class="bm-lcd">
-        <div class="bm-lcd-row inv">BOARD ${String(boardNo).padStart(2,' ')} — AWAITING OK </div>
+        <div class="bm-lcd-row inv">BOARD ${String(boardNo).padStart(2,' ')} ONAY BEKLENIYOR</div>
         <div class="bm-lcd-row">CONTR:${(boardData.contract||'PASS').padEnd(14)}</div>
-        <div class="bm-lcd-row">NS SCORE: ${String(scoreStr).padEnd(10)}</div>
-        <div class="bm-lcd-row blink">OPPONENT CONFIRM?   </div>
+        <div class="bm-lcd-row">NS SKOR: ${String(scoreStr).padEnd(11)}</div>
+        <div class="bm-lcd-row blink">RAKIP ONAYLASIN...  </div>
       </div>
       <div class="approval-screen">
-        <div class="approval-title">⏳ Waiting for opponent confirmation</div>
+        <div class="approval-title">⏳ Rakip onayı bekleniyor</div>
         <div class="approval-contract">${boardData.contract||'PASS'}</div>
         <div class="approval-score" style="color:${scoreColor};">NS: ${scoreStr}</div>
-        <div class="approval-waiting">Opponent must press OK on their device...</div>
-        <div style="display:flex;gap:8px;">
-          <button class="btn btn-ghost btn-full" onclick="bmCancelApproval('${key}');renderTableDetail(${bmTableNo});">✕ Cancel</button>
-          <button class="btn btn-green btn-full" onclick="bmSelfApprove('${key}',${bmTableNo})">✅ Both Agree</button>
+        <div class="approval-waiting">Rakip cihazda OK basması bekleniyor...</div>
+        <div id="otherTablesDiv">${otherTablesHTML}</div>
+        <div style="display:flex;gap:8px;margin-top:10px;">
+          <button class="btn btn-ghost btn-full" onclick="bmCancelApproval('${key}');renderTableDetail(${bmTableNo});">✕ İptal</button>
+          <button class="btn btn-green btn-full" onclick="bmSelfApprove('${key}',${bmTableNo})">✅ İkisi de Onayladı</button>
         </div>
       </div>
     </div>`;
 
-  // Poll for approval
+  // Poll for approval + refresh other tables info
   if(bmPollInterval)clearInterval(bmPollInterval);
   bmPollInterval=setInterval(()=>{
     const aps=getApprovals();
     const ap=aps[key];
+    // Refresh other tables display
+    const otherDiv=document.getElementById('otherTablesDiv');
+    if(otherDiv)otherDiv.innerHTML=buildOtherHTML();
     if(!ap||ap.status==='approved'){
       clearInterval(bmPollInterval);bmPollInterval=null;
-      // Board was approved, save and continue
       const bs=getBoards();
       if(!bs[key]||bs[key].status!=='done'){
         bs[key]={...boardData,status:'done',time:new Date().toISOString()};
         setBoards(bs);
         delete aps[key];setApprovals(aps);
       }
-      addLog('ok',`Board ${boardNo} confirmed`,boardData.contract||'PASS');
-      toast('✅ Confirmed! Next board.');
+      addLog('ok','Board '+boardNo+' onaylandi',boardData.contract||'PASS');
+      toast('✅ Onaylandi! Siradaki board.');
       renderTableDetail(bmTableNo);
     }
-  },1000);
+  },1500);
 };
 
 // Quick self-approve (both sides agree, only one device)
@@ -1178,7 +1263,10 @@ function renderScreenPanel(){
     <div class="scoreboard">
       <div class="sb-header">
         <div class="sb-title">🏆 ${s.name}</div>
-        <span class="live-pill"><div class="live-dot"></div>Live</span>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <span class="live-pill"><div class="live-dot"></div>Canli</span>
+          <button class="btn btn-blue btn-sm" onclick="screenPrintPDF()">🖨 PDF Çikti</button>
+        </div>
       </div>
       <div class="stats-row">
         <div class="stat-box"><div class="sv">${s.currentRound||0}/${s.roundCount||0}</div><div class="sl">Round</div></div>
@@ -1197,6 +1285,75 @@ function renderScreenPanel(){
   // Auto-refresh every 10s
   setTimeout(()=>{if(role==='screen')renderScreenPanel();},10000);
 }
+
+window.screenPrintPDF=function(){
+  const s=getState();const boards=getBoards();const movements=getMovements();const pairs=getPairs();
+  const keys=Object.keys(boards).filter(k=>boards[k].status==='done').sort();
+  if(!keys.length){toast('Henüz tamamlanan board yok');return;}
+  
+  let rows='';
+  keys.forEach(k=>{
+    const d=boards[k];const[t,r,b]=k.split('_');
+    const m=movements[r+'_'+t]||{};
+    const ns=pairs[m.ns]||{name:m.ns||'?'};
+    const ew=pairs[m.ew]||{name:m.ew||'?'};
+    const sc=typeof d.nsScore==='number'?((d.nsScore>0?'+':'')+d.nsScore):d.nsScore||'?';
+    const rowBg=typeof d.nsScore==='number'?(d.nsScore>0?'#e8f5e9':d.nsScore<0?'#ffebee':'#fff8e1'):'#f5f5f5';
+    rows+=`<tr style="background:${rowBg}">
+      <td style="font-weight:700;color:#1565c0;">Masa ${t}</td>
+      <td>Tur ${r}</td>
+      <td style="font-weight:700;">Board ${b}</td>
+      <td style="color:#1565c0;">${ns.name}</td>
+      <td style="color:#e65100;">${ew.name}</td>
+      <td style="font-family:monospace;">${d.adjusted?'[ADJ] ':''}\${d.contract||'PASS'}</td>
+      <td style="font-family:monospace;color:#555;">${d.lead||'—'}</td>
+      <td style="font-weight:700;color:${typeof d.nsScore==='number'?(d.nsScore>0?'#2e7d32':d.nsScore<0?'#c62828':'#555'):'#7b1fa2'};">${sc}</td>
+    </tr>`;
+  });
+
+  const mpData=calcMP();
+  const allRows=Object.values(pairs).filter(p=>!p.isPhantom).map(p=>{
+    const mp=mpData[p.id]||{mp:0,boards:0,top:0};
+    const pct=mp.top>0?(mp.mp/mp.top*100).toFixed(1):0;
+    return{...p,mp:mp.mp,pct:parseFloat(pct)};
+  }).sort((a,b)=>b.pct-a.pct);
+  
+  let rankRows='';
+  allRows.forEach((r,i)=>{
+    const bg=i===0?'#fff8e1':i===1?'#f5f5f5':i===2?'#fbe9e7':'#fff';
+    rankRows+=`<tr style="background:${bg}">
+      <td style="font-weight:700;color:${i<3?'#e65100':'#555'};">${i+1}.</td>
+      <td style="font-weight:600;">${r.name}</td>
+      <td style="color:${r.dir==='NS'?'#1565c0':'#e65100'};font-weight:600;">${r.dir}</td>
+      <td style="font-weight:700;">${r.mp}</td>
+      <td style="font-weight:700;color:${r.pct>=60?'#2e7d32':r.pct>=45?'#e65100':'#c62828'};">${r.pct}%</td>
+    </tr>`;
+  });
+
+  const win=window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>${s.name} — Turnuva Sonuclari</title>
+  <style>
+    body{font-family:Arial,sans-serif;font-size:11px;margin:16px;color:#222;}
+    h1{font-size:18px;margin-bottom:4px;color:#1a237e;}
+    h2{font-size:13px;margin:16px 0 6px;color:#1a237e;border-bottom:2px solid #1a237e;padding-bottom:3px;}
+    .meta{font-size:10px;color:#666;margin-bottom:14px;}
+    table{width:100%;border-collapse:collapse;margin-bottom:12px;font-size:10.5px;}
+    th{background:#1a237e;color:#fff;padding:5px 7px;text-align:left;font-size:9.5px;text-transform:uppercase;}
+    td{padding:4px 7px;border-bottom:1px solid #e0e0e0;}
+    @media print{body{margin:8px;}h1{font-size:15px;}}
+  </style>
+  </head><body>
+  <h1>♠ ${s.name}</h1>
+  <div class="meta">${s.tableCount} masa · ${s.roundCount} tur · ${s.boardsPerRound} board/tur · ${s.scoring||'MP'} · ${s.movement||''} · Yazdirilma: ${new Date().toLocaleString('tr-TR')}</div>
+  <h2>🏆 Genel Sıralama</h2>
+  <table><thead><tr><th>#</th><th>Oyuncu</th><th>Yön</th><th>MP</th><th>%</th></tr></thead><tbody>${rankRows}</tbody></table>
+  <h2>📊 Tüm Tamamlanan Board Sonuclari</h2>
+  <table><thead><tr><th>Masa</th><th>Tur</th><th>Board</th><th>NS Cifti</th><th>EW Cifti</th><th>Kontrat</th><th>İlk Hamle</th><th>NS Puan</th></tr></thead><tbody>${rows}</tbody></table>
+  <script>window.onload=function(){window.print();}<\/script>
+  </body></html>`);
+  win.document.close();
+};
 
 window.setScreenTab=function(tab,btn){
   screenTab=tab;
@@ -1300,7 +1457,7 @@ function renderSetup(){
   return`
   <div class="card">
     <div class="card-title"><span>⚙️</span> Tournament Setup</div>
-    <div class="field"><label>Tournament Name</label><input id="aName" value="${s.name||''}"></div>
+    <div class="field"><label>Turnuva Kimliği (otomatik)</label><input id="aName" value="${s.name||''}" readonly style="cursor:default;color:var(--text3);font-size:0.82rem;" placeholder="Turnuva başlatıldığında otomatik atanır"></div>
     <div class="field-row">
       <div class="field">
         <label>Number of Players</label>
@@ -1374,13 +1531,16 @@ window.adminUpdateCalc=function(){
 };
 
 window.adminSetup=function(){
-  const name=document.getElementById('aName').value.trim();
+  const now=new Date();
+  const pad=n=>String(n).padStart(2,'0');
+  const autoName=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-'+pad(now.getDate())+' '+pad(now.getHours())+':'+pad(now.getMinutes());
+  document.getElementById('aName').value=autoName;
+  const name=autoName;
   const players=parseInt(document.getElementById('aPlayers').value);
   const totalBoards=parseInt(document.getElementById('aTotalBoards').value);
   const bpr=parseInt(document.getElementById('aBPR').value);
   const scoring=document.getElementById('aScoring').value;
   const mov=document.getElementById('aMovement').value;
-  if(!name){toast('❌ Enter tournament name');return;}
   if(isNaN(players)||players<4){toast('❌ Min 4 players');return;}
   if(isNaN(totalBoards)||totalBoards<4){toast('❌ Min 4 boards');return;}
   if(isNaN(bpr)||bpr<1||bpr>8){toast('❌ Boards/round: 1-8');return;}
@@ -1477,6 +1637,7 @@ function renderPlayersAdmin(){
     <div class="player-name-input">
       <span class="player-num">${k.replace('ns_','N').replace('ew_','E').replace('p','P')}</span>
       <input value="${p.name}" onchange="updatePairName('${k}',this.value)"
+        placeholder="Ad Soyad"
         style="flex:1;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem;outline:none;font-family:inherit;">
     </div>`;};
 
@@ -1499,10 +1660,15 @@ function renderPlayersAdmin(){
       <button class="btn btn-gold btn-full" onclick="adminBulkNames()">Load Names</button>
     </div>
     <div class="card">
-      <div class="card-title"><span>📂</span> Load Boards from File</div>
-      <p style="font-size:0.8rem;color:var(--text2);margin-bottom:8px;">Load a previously saved boards JSON file to continue from where you left off.</p>
+      <div class="card-title"><span>📂</span> Board Dosyası Yükle</div>
+      <p style="font-size:0.8rem;color:var(--text2);margin-bottom:8px;">Daha önce kaydedilmiş JSON dosyasını yükleyin ya da devam edin.</p>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
+        <button class="btn btn-gold btn-sm" onclick="document.getElementById('boardFile').click()">📄 JSON Yükle</button>
+        <button class="btn btn-blue btn-sm" onclick="adminImportHandsOpen()">🃏 PBN/LIN El Yükle</button>
+        <button class="btn btn-ghost btn-sm" onclick="toast('El yüklenmeden devam ediliyor...')">▶ Yükleme, Devam Et</button>
+      </div>
       <div class="import-drop" onclick="document.getElementById('boardFile').click()">
-        <div style="font-size:2rem;">📂</div><div style="font-weight:600;">Choose boards JSON</div>
+        <div style="font-size:2rem;">📂</div><div style="font-weight:600;">boards.json Sürükle / Seç</div>
         <input type="file" id="boardFile" accept=".json" onchange="adminLoadBoardsFile(this)" style="display:none;">
       </div>
     </div>`;
@@ -1556,6 +1722,79 @@ window.adminLoadBoardsFile=function(inp){
     }catch{toast('❌ Invalid JSON');}
   };r.readAsText(f);
 };
+window.adminImportHandsOpen=function(){
+  openModal('PBN / LIN El Dosyası Yükle',`
+    <p style="font-size:0.82rem;color:var(--text2);margin-bottom:8px;">.pbn veya .lin formatında el dosyası yükleyin. El bilgileri ileri aşamada referans için saklanır.</p>
+    <div style="background:var(--surface2);border-radius:6px;padding:10px;margin-bottom:10px;font-size:0.75rem;color:var(--text2);">
+      <b>Desteklenen formatlar:</b><br>
+      • <b>PBN</b>: [Board "1"] [Deal "N:..."] formatı<br>
+      • <b>LIN</b>: BBO LIN formatı (pn|...|md|...)<br>
+      • <b>CSV</b>: Board,North,East,South,West satırları
+    </div>
+    <div class="import-drop" onclick="document.getElementById('handsFile').click()">
+      <div style="font-size:2rem;">🃏</div><div style="font-weight:600;">.pbn / .lin / .txt Seç</div>
+      <input type="file" id="handsFile" accept=".pbn,.lin,.txt,.csv" onchange="adminLoadHandsFile(this)" style="display:none;">
+    </div>
+    <div class="field"><label>Veya dosya içeriğini yapıştırın:</label><textarea id="handsText" rows="5" placeholder="[Board &quot;1&quot;]&#10;[Deal &quot;N:AKQ.23.456.789 ...&quot;]&#10;..."></textarea></div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Vazgeç</button>
+     <button class="btn btn-gold" onclick="adminParseHandsText()">Yükle</button>`);
+};
+window.adminLoadHandsFile=function(inp){
+  const f=inp.files[0];if(!f)return;
+  const r=new FileReader();r.onload=e=>{
+    document.getElementById('handsText').value=e.target.result;
+  };r.readAsText(f);
+};
+window.adminParseHandsText=function(){
+  const raw=(document.getElementById('handsText').value||'').trim();
+  if(!raw){toast('❌ Dosya boş');return;}
+  const hands=parsePBNorLIN(raw);
+  if(!hands.length){toast('❌ Format tanınamadı');return;}
+  // Store as bm_hands
+  localStorage.setItem('bm_hands',JSON.stringify(hands));
+  addLog('ok','El dosyası yüklendi',hands.length+' board el bilgisi');
+  toast('✅ '+hands.length+' el yüklendi!');
+  closeModal();renderAdminTab();
+};
+function parsePBNorLIN(raw){
+  const hands=[];
+  // Try PBN
+  if(raw.indexOf('[Board')!==-1){
+    const blocks=raw.split(/(?=\[Board )/i).filter(Boolean);
+    blocks.forEach(bl=>{
+      const bm=bl.match(/\[Board "([^"]+)"\]/i);
+      const dm=bl.match(/\[Deal "([^"]+)"\]/i);
+      const vm=bl.match(/\[Vulnerable "([^"]+)"\]/i);
+      const fm=bl.match(/\[Dealer "([^"]+)"\]/i);
+      if(bm&&dm){
+        hands.push({board:bm[1],deal:dm[1],vulnerable:vm?vm[1]:'None',dealer:fm?fm[1]:'N'});
+      }
+    });
+    return hands;
+  }
+  // Try LIN
+  if(raw.indexOf('md|')!==-1||raw.indexOf('pn|')!==-1){
+    const lines=raw.split(/\r?\n/).filter(Boolean);
+    lines.forEach((ln,i)=>{
+      const md=ln.match(/md\|([^|]+)/);
+      if(md){hands.push({board:String(i+1),deal:'LIN:'+md[1],vulnerable:'None',dealer:'N'});}
+    });
+    return hands;
+  }
+  // Try CSV
+  if(raw.indexOf(',')!==-1){
+    const rows=raw.split(/\r?\n/).filter(Boolean);
+    const header=rows[0].toLowerCase();
+    if(header.indexOf('board')!==-1){
+      rows.slice(1).forEach(row=>{
+        const cols=row.split(',');
+        if(cols.length>=2)hands.push({board:cols[0].trim(),deal:cols.slice(1).join(','),vulnerable:'None',dealer:'N'});
+      });
+      return hands;
+    }
+  }
+  return hands;
+}
 
 // ── Movement ──
 function renderMovement(){
@@ -1773,11 +2012,78 @@ window.viewArchive=function(i){
     const pct=mp.top>0?(mp.mp/mp.top*100).toFixed(1):0;
     return{...p,mp:mp.mp,pct:parseFloat(pct)};
   }).sort((a,b)=>b.pct-a.pct);
-  const rowsHTML=rows.slice(0,20).map((r,i)=>`<tr><td>${i+1}</td><td>${r.name}</td><td>${r.dir}</td><td>${r.mp}</td><td>${r.pct}%</td></tr>`).join('');
-  openModal(`${a.state.name} — Results`,
-    `<table class="mv-table"><thead><tr><th>#</th><th>Pair</th><th>Dir</th><th>MP</th><th>%</th></tr></thead><tbody>${rowsHTML}</tbody></table>`,
-    `<button class="btn btn-ghost" onclick="closeModal()">Close</button>`);
+  const rowsHTML=rows.map((r,idx)=>`<tr>
+    <td style="font-weight:700;">${idx+1}</td>
+    <td style="font-weight:600;">${r.name}</td>
+    <td style="color:${r.dir==='NS'?'var(--blue)':'var(--gold)'};">${r.dir}</td>
+    <td style="font-weight:700;">${r.mp}</td>
+    <td style="color:${r.pct>=60?'var(--green)':r.pct>=45?'var(--gold)':'var(--red)'};">${r.pct}%</td>
+  </tr>`).join('');
+  // Also show all board results in a separate section
+  const bkeys=Object.keys(a.boards||{}).filter(k=>a.boards[k].status==='done').sort();
+  const boardRowsHTML=bkeys.slice(0,50).map(k=>{
+    const d=a.boards[k];const[t,r,b]=k.split('_');
+    const m=(a.movements||{})[r+'_'+t]||{};
+    const ns=pairs[m.ns]||{name:m.ns||'?'};
+    const ew=pairs[m.ew]||{name:m.ew||'?'};
+    const sc=typeof d.nsScore==='number'?((d.nsScore>0?'+':'')+d.nsScore):d.nsScore||'?';
+    return`<tr>
+      <td style="color:var(--gold);font-size:0.7rem;">M${t}/T${r}/B${b}</td>
+      <td style="color:var(--blue);font-size:0.75rem;">${ns.name}</td>
+      <td style="color:var(--gold);font-size:0.75rem;">${ew.name}</td>
+      <td style="font-family:'Share Tech Mono',monospace;font-size:0.75rem;">${d.contract||'PASS'}</td>
+      <td style="font-weight:700;color:${typeof d.nsScore==='number'?(d.nsScore>0?'var(--green)':'var(--red)'):'var(--purple)'};">${sc}</td>
+    </tr>`;
+  }).join('');
+  openModal(`${a.state.name} — Sonuçlar`,
+    `<div style="font-size:0.75rem;color:var(--text3);margin-bottom:8px;">${rows.length} çift · ${bkeys.length} board tamamlandı</div>
+    <div style="font-weight:600;color:var(--gold);font-size:0.78rem;margin-bottom:6px;">Sıralama</div>
+    <table class="mv-table"><thead><tr><th>#</th><th>Ad Soyad</th><th>Yön</th><th>MP</th><th>%</th></tr></thead><tbody>${rowsHTML}</tbody></table>
+    ${boardRowsHTML?'<div style="font-weight:600;color:var(--gold);font-size:0.78rem;margin:10px 0 6px;">Board Sonuçları</div><table class="mv-table"><thead><tr><th>Masa/T/B</th><th>NS</th><th>EW</th><th>Kontrat</th><th>NS Puan</th></tr></thead><tbody>'+boardRowsHTML+'</tbody></table>':''}`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Kapat</button>
+     <button class="btn btn-blue btn-sm" onclick="archivePDF(${i})">PDF Çikti</button>`);
 };
+
+window.archivePDF=function(i){
+  const a=getArchives()[i];if(!a)return;
+  const mpData=calcMPFromData(a.boards,a.movements);
+  const pairs=a.pairs||{};
+  const rows=Object.values(pairs).filter(p=>!p.isPhantom).map(p=>{
+    const mp=mpData[p.id]||{mp:0,boards:0,top:0};
+    const pct=mp.top>0?(mp.mp/mp.top*100).toFixed(1):0;
+    return{...p,mp:mp.mp,pct:parseFloat(pct)};
+  }).sort((x,y)=>y.pct-x.pct);
+  let rankRows='';
+  rows.forEach((r,idx)=>{
+    const bg=idx===0?'#fff8e1':idx%2===0?'#fafafa':'#fff';
+    rankRows+=`<tr style="background:${bg}"><td style="font-weight:700;">${idx+1}</td><td style="font-weight:600;">${r.name}</td><td style="color:${r.dir==='NS'?'#1565c0':'#e65100'};">${r.dir}</td><td style="font-weight:700;">${r.mp}</td><td style="font-weight:700;color:${r.pct>=60?'#2e7d32':r.pct>=45?'#e65100':'#c62828'};">${r.pct}%</td></tr>`;
+  });
+  const bkeys=Object.keys(a.boards||{}).filter(k=>a.boards[k].status==='done').sort();
+  let bRows='';
+  bkeys.forEach(k=>{
+    const d=a.boards[k];const[t,r,b]=k.split('_');
+    const m=(a.movements||{})[r+'_'+t]||{};
+    const ns=pairs[m.ns]||{name:m.ns||'?'};const ew=pairs[m.ew]||{name:m.ew||'?'};
+    const sc=typeof d.nsScore==='number'?((d.nsScore>0?'+':'')+d.nsScore):d.nsScore||'?';
+    const bg=typeof d.nsScore==='number'?(d.nsScore>0?'#e8f5e9':d.nsScore<0?'#ffebee':'#fff8e1'):'#f5f5f5';
+    bRows+=`<tr style="background:${bg}"><td>M${t}/T${r}/B${b}</td><td>${ns.name}</td><td>${ew.name}</td><td style="font-family:monospace;">${d.contract||'PASS'}</td><td style="font-family:monospace;">${d.lead||'-'}</td><td style="font-weight:700;">${sc}</td></tr>`;
+  });
+  const st=a.state||{};
+  const win=window.open('','_blank');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${st.name} Sonuclari</title>
+  <style>body{font-family:Arial,sans-serif;font-size:11px;margin:16px;color:#222;}h1{font-size:17px;color:#1a237e;margin-bottom:3px;}h2{font-size:12px;color:#1a237e;border-bottom:1px solid #1a237e;padding-bottom:2px;margin:14px 0 5px;}.meta{font-size:10px;color:#666;margin-bottom:12px;}table{width:100%;border-collapse:collapse;margin-bottom:10px;}th{background:#1a237e;color:#fff;padding:4px 7px;text-align:left;font-size:9px;text-transform:uppercase;}td{padding:4px 7px;border-bottom:1px solid #e0e0e0;}</style>
+  </head><body>
+  <h1>♠ ${st.name||'Turnuva'}</h1>
+  <div class="meta">${st.tableCount||'?'} masa · ${st.roundCount||'?'} tur · ${st.scoring||'MP'} · Bitis: ${a.finished?new Date(a.finished).toLocaleString('tr-TR'):''}</div>
+  <h2>Genel Sıralama</h2>
+  <table><thead><tr><th>#</th><th>Ad Soyad</th><th>Yon</th><th>MP</th><th>%</th></tr></thead><tbody>${rankRows}</tbody></table>
+  <h2>Board Sonuclari (${bkeys.length} board)</h2>
+  <table><thead><tr><th>Masa/Tur/B</th><th>NS</th><th>EW</th><th>Kontrat</th><th>Ilk Hamle</th><th>NS Puan</th></tr></thead><tbody>${bRows}</tbody></table>
+  <script>window.onload=function(){window.print();}<\/script>
+  </body></html>`);
+  win.document.close();
+};
+
 function calcMPFromData(boards,movements){
   const boardScores={};
   Object.entries(boards).forEach(([key,b])=>{
