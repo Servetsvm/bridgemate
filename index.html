@@ -996,7 +996,28 @@ window.bmSelectTable=function(){
     }
   }
 
-  proceed(getPairs(),getMovements());
+  // If Firebase is online but cache is empty, fetch first then proceed
+  if(_fbOnlineMode&&_fbDb&&_fbTourneyId&&
+     (!_fbCache['pairs']||!_fbCache['movements'])){
+    const pc=document.getElementById('panelContent');
+    if(pc)pc.innerHTML=`<div class="waiting-screen" style="padding:60px 20px;">
+      <div class="waiting-icon">⚡</div>
+      <div class="waiting-title">Loading data...</div>
+      <div class="waiting-sub">Connecting to tournament</div>
+    </div>`;
+    _fbDb.ref('tournaments/'+_fbTourneyId).once('value').then(snap=>{
+      const data=snap.val()||{};
+      ['state','pairs','boards','movements','approvals'].forEach(k=>{
+        if(data[k]!==undefined){
+          _fbCache[k]=data[k];
+          localStorage.setItem('bm_'+k,JSON.stringify(data[k]));
+        }
+      });
+      proceed(getPairs(),getMovements());
+    }).catch(()=>proceed(getPairs(),getMovements()));
+  } else {
+    proceed(getPairs(),getMovements());
+  }
 };
 
 // Show loaded name with option to confirm or re-enter
@@ -1088,6 +1109,24 @@ window.bmSaveNameAndGo=function(tableNo,pairKey){
 };
 
 function renderTableDetail(tableNo){
+  // If Firebase cache is empty, fetch first then render
+  if(_fbOnlineMode&&_fbDb&&_fbTourneyId&&
+     (!_fbCache['pairs']||!_fbCache['movements'])){
+    _fbDb.ref('tournaments/'+_fbTourneyId).once('value').then(snap=>{
+      const data=snap.val()||{};
+      ['state','pairs','boards','movements','approvals'].forEach(k=>{
+        if(data[k]!==undefined){
+          _fbCache[k]=data[k];
+          localStorage.setItem('bm_'+k,JSON.stringify(data[k]));
+        }
+      });
+      renderTableDetail(tableNo);
+    }).catch(()=>{_doRenderTableDetail(tableNo);});
+    return;
+  }
+  _doRenderTableDetail(tableNo);
+}
+function _doRenderTableDetail(tableNo){
   const s=getState();
   const movements=getMovements();const boards=getBoards();
   const pairs=getPairs();
@@ -1110,7 +1149,7 @@ function renderTableDetail(tableNo){
   const totalBoards=boardList.length;
   const nsNum=m.ns?m.ns.replace(/[^0-9]/g,''):'?';
   const ewNum=m.ew?m.ew.replace(/[^0-9]/g,''):'?';
-  const lcdLine1=`RND ${String(s.currentRound).padStart(2,' ')}  TBL:${String(tableNo).padStart(2,' ')}  B${(m.boardStart||'?')}-${(m.boardEnd||'?')}`;
+  const lcdLine1=`RND ${String(s.currentRound).padStart(2,' ')}  NS:${nsNum.padStart(2,' ')} EW:${ewNum.padStart(2,' ')} B${m.boardStart||'?'}-${m.boardEnd||'?'}`;
 
   const approvals=getApprovals();
   // Find the next (first un-done) board to play
@@ -1164,8 +1203,8 @@ function renderTableDetail(tableNo){
       </div>
       <div class="bm-lcd">
         <div class="bm-lcd-row inv">${lcdLine1.slice(0,20).padEnd(20)}</div>
-        <div class="bm-lcd-row">NS${nsNum.padStart(2,' ')}: ${nsName.slice(0,14).padEnd(14)}</div>
-        <div class="bm-lcd-row">EW${ewNum.padStart(2,' ')}: ${ewName.slice(0,14).padEnd(14)}</div>
+        <div class="bm-lcd-row">NS: ${nsName.slice(0,16).padEnd(16)}</div>
+        <div class="bm-lcd-row">EW: ${ewName.slice(0,16).padEnd(16)}</div>
         <div class="bm-lcd-row">${s.scoring==='IMP'?'IMP':'MP'} SCORING          </div>
       </div>
       <div id="boardsSection">
@@ -1316,8 +1355,7 @@ window.bmShowWaiting=function(tableNo){
       <div class="bm-lcd">
         <div class="bm-lcd-row inv">TABLE ${String(tableNo).padStart(2,' ')}  ROUND ${String(nextR).padStart(2,' ')}    </div>
         <div class="bm-lcd-row">WAITING FOR PLAYERS</div>
-        <div class="bm-lcd-row">NS: ${(nextNS.name||'').slice(0,16).padEnd(16)}</div>
-        <div class="bm-lcd-row">EW: ${(nextEW.name||'').slice(0,16).padEnd(16)}</div>
+        <div class="bm-lcd-row blink">NS:${(nextNS.name||'').slice(0,6).padEnd(6)} EW:${(nextEW.name||'').slice(0,6).padEnd(6)} </div>
         <div class="bm-lcd-row">BOARDS ${nextM.boardStart||'?'} TO ${nextM.boardEnd||'?'}      </div>
       </div>
       <div class="waiting-screen">
@@ -1457,13 +1495,6 @@ function renderBoardForm(boardNo,vuln,existing){
   const lcdVuln=vuln==='Both'?'BOTH VUL':vuln==='None'?'NO VUL':vuln+' VUL';
   const s=getState();
   const m=getMovements()[s.currentRound+'_'+bmTableNo]||{};
-  const pairs=getPairs();
-  const nsPair=pairs[m.ns]||{name:''};
-  const ewPair=pairs[m.ew]||{name:''};
-  const nsNum=(m.ns||'').replace(/[^0-9]/g,'');
-  const ewNum=(m.ew||'').replace(/[^0-9]/g,'');
-  const nsName=nsPair.name&&nsPair.name.trim()?nsPair.name:'NS '+nsNum;
-  const ewName=ewPair.name&&ewPair.name.trim()?ewPair.name:'EW '+ewNum;
 
   document.getElementById('panelContent').innerHTML=`
     <div class="bm-device" style="max-width:360px;">
@@ -1474,9 +1505,8 @@ function renderBoardForm(boardNo,vuln,existing){
         ${existing?'<span style="font-size:0.7rem;color:var(--text3);">(editing)</span>':''}
       </div>
       <div class="bm-lcd" id="lcdDisplay">
-        <div class="bm-lcd-row inv">RND ${String(s.currentRound).padStart(2,' ')}  TBL:${String(bmTableNo).padStart(2,' ')}  B${boardNo}  ${lcdVuln.slice(0,7)}</div>
-        <div class="bm-lcd-row">NS${nsNum.padStart(2,' ')}: ${nsName.slice(0,14).padEnd(14)}</div>
-        <div class="bm-lcd-row">EW${ewNum.padStart(2,' ')}: ${ewName.slice(0,14).padEnd(14)}</div>
+        <div class="bm-lcd-row inv">RND ${String(s.currentRound).padStart(2,' ')}  NS:${(m.ns||'').replace(/[^0-9]/g,'').padStart(2,' ')} EW:${(m.ew||'').replace(/[^0-9]/g,'').padStart(2,' ')}  B${boardNo}</div>
+        <div class="bm-lcd-row">BOARD : ${String(boardNo).padStart(2,' ')}             </div>
         <div class="bm-lcd-row" id="lcdContr">CONTR : -              </div>
         <div class="bm-lcd-row" id="lcdLead">LEAD  : -              </div>
         <div class="bm-lcd-row" id="lcdResult">RESULT: -              </div>
