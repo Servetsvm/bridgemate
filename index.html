@@ -2199,7 +2199,7 @@ function fbAutoConnectOnSetup(tourneyName){
     // the setup form before it has been rendered with our new data
     setTimeout(()=>{
       ['state','pairs','boards','movements','approvals','archives','logs'].forEach(k=>fbSubscribe(k));
-    }, 6000);
+    }, 15000);
   }
 }
 
@@ -2328,17 +2328,17 @@ window.adminUpdateCalc=function(){
   const tables=Math.floor(players/4);
   const hasPhantom=players%4!==0;
   const rounds=tables||8;
-  // Auto-calculate boards per round from total boards / rounds
+  // Auto-calculate boards per round: floor division so we never exceed total boards
   let bpr=3;
   if(rounds>0&&totalB>0){
-    bpr=Math.max(1,Math.min(8,Math.round(totalB/rounds)));
+    bpr=Math.max(1,Math.min(8,Math.floor(totalB/rounds)));
   }
   const bprEl=document.getElementById('aBPR');
   if(bprEl)bprEl.value=bpr;
   const hint=document.getElementById('calcHint');
   const bprHint=document.getElementById('bprHint');
   if(hint)hint.textContent=`→ ${tables} tables${hasPhantom?' + phantom pair':''}`;
-  if(bprHint)bprHint.textContent=`→ ${bpr} boards/round × ${rounds} rounds = ${bpr*rounds} total slots`;
+  if(bprHint)bprHint.textContent=`→ ${bpr} boards/round × ${rounds} rounds = ${bpr*rounds} total boards`;
 };
 
 let _adminSetupBusy=false;
@@ -2377,7 +2377,7 @@ window.adminSetup=function(){
   renderAdminTab();
   // Clear busy flag AFTER our own render is done, on next tick
   // so any Firebase callbacks that fire during setState are suppressed
-  setTimeout(()=>{ _adminSetupBusy=false; }, 5000);
+  setTimeout(()=>{ _adminSetupBusy=false; }, 14000);
 };
 
 window.adminStart=function(){
