@@ -939,30 +939,56 @@ window.bmSelectTable=function(){
   localStorage.setItem('bm_tableSession',JSON.stringify({
     tableNo:n, side:bmSide, tid:_fbTourneyId, ts:Date.now()
   }));
-  // Check current pair name
   const movements=getMovements();
   const pairs=getPairs();
   const mk=s.currentRound+'_'+n;
   const m=movements[mk]||{};
   const pairKey=bmSide==='ns'?m.ns:m.ew;
   const pair=pairs[pairKey]||{};
-  const hasName=pair.name&&pair.name.trim()&&!pair.name.startsWith('Pair ');
-  // Show optional name entry screen
-  if(!hasName){
-    bmShowNameEntry(n,pairKey,pair.name||'');
+  const hasRealName=pair.name&&pair.name.trim()&&!pair.name.startsWith('Pair ');
+  if(hasRealName){
+    // Names already loaded from admin — show confirmation screen
+    bmShowNameConfirm(n,pairKey,pair.name);
   } else {
-    renderTableDetail(n);
+    // No name yet — show entry form
+    bmShowNameEntry(n,pairKey,'');
   }
 };
 
-window.bmShowNameEntry=function(tableNo,pairKey,currentName){
-  const s=getState();
-  const movements=getMovements();
-  const mk=s.currentRound+'_'+tableNo;
-  const m=movements[mk]||{};
-  const pairs=getPairs();
+// Show loaded name with option to confirm or re-enter
+window.bmShowNameConfirm=function(tableNo,pairKey,loadedName){
   const sideLabel=bmSide==='ns'?'🔵 NS':'🟡 EW';
-  // Parse existing name: "John Smith & Jane Doe" → player1, player2
+  const parts=(loadedName||'').split('&').map(x=>x.trim());
+  const p1=parts[0]||'';const p2=parts[1]||'';
+  const c=document.getElementById('panelContent');
+  c.innerHTML=`
+    <div class="bm-device" style="max-width:380px;">
+      <div class="bm-lcd" style="margin-bottom:14px;">
+        <div class="bm-lcd-row inv">TABLE ${String(tableNo).padStart(2,' ')} — ${bmSide.toUpperCase()}</div>
+        <div class="bm-lcd-row">NAMES LOADED FROM DIRECTOR</div>
+        <div class="bm-lcd-row blink">PLEASE CONFIRM             </div>
+      </div>
+      <div class="card" style="border-color:var(--green);">
+        <div class="card-title" style="color:var(--green);"><span>✅</span> ${sideLabel} — Names Loaded</div>
+        <div style="background:var(--greendim);border:1px solid rgba(76,175,125,0.25);border-radius:var(--radius-sm);padding:14px;margin-bottom:14px;text-align:center;">
+          ${p1?`<div style="font-size:1.1rem;font-weight:700;color:var(--text);margin-bottom:${p2?'6px':'0'};">${p1}</div>`:''}
+          ${p2?`<div style="font-size:1.1rem;font-weight:700;color:var(--text);">${p2}</div>`:''}
+          ${!p1&&!p2?`<div style="font-size:1rem;font-weight:700;color:var(--text);">${loadedName}</div>`:''}
+        </div>
+        <div style="display:flex;gap:8px;">
+          <button class="btn btn-ghost" style="flex:1;" onclick="bmShowNameEntry(${tableNo},'${pairKey}','${loadedName.replace(/'/g,"\\'")}')">
+            ✏️ Re-enter
+          </button>
+          <button class="btn btn-green" style="flex:1;" onclick="renderTableDetail(${tableNo})">
+            ✅ Correct — Enter
+          </button>
+        </div>
+      </div>
+    </div>`;
+};
+
+window.bmShowNameEntry=function(tableNo,pairKey,currentName){
+  const sideLabel=bmSide==='ns'?'🔵 NS':'🟡 EW';
   const existingName=(currentName||'').trim();
   const parts=existingName.split('&').map(x=>x.trim());
   const p1=parts[0]||'';
@@ -973,7 +999,7 @@ window.bmShowNameEntry=function(tableNo,pairKey,currentName){
       <div class="bm-lcd" style="margin-bottom:14px;">
         <div class="bm-lcd-row inv">TABLE ${String(tableNo).padStart(2,' ')} — ${bmSide.toUpperCase()} NAME ENTRY</div>
         <div class="bm-lcd-row">ENTER PLAYER NAMES BELOW</div>
-        <div class="bm-lcd-row">OPTIONAL — SKIP TO CONTINUE</div>
+        <div class="bm-lcd-row">OR SKIP TO CONTINUE        </div>
       </div>
       <div class="card">
         <div class="card-title"><span>✏️</span> ${sideLabel} — Player Names <span style="font-size:0.72rem;color:var(--text3);font-weight:400;">(optional)</span></div>
