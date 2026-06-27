@@ -1996,19 +1996,37 @@ window.showQR=function(){
     localStorage.setItem('bm_fbTourneyId',tid);
     _fbTourneyId=tid;
     setTimeout(()=>{
-      if(_fbOnlineMode){
+      if(!_fbOnlineMode)return;
+      role='table';
+      document.getElementById('loginScreen').style.display='none';
+      document.getElementById('app').style.display='flex';
+      document.getElementById('topbarRole').textContent='Table';
+      refreshTopbar();
+      // Show loading screen
+      document.getElementById('panelContent').innerHTML=`
+        <div class="waiting-screen" style="padding:80px 20px;">
+          <div class="waiting-icon">⚡</div>
+          <div class="waiting-title">Loading tournament data...</div>
+          <div class="waiting-sub">Please wait</div>
+        </div>`;
+      // Fetch ALL data at once, guaranteed
+      _fbDb.ref('tournaments/'+tid).once('value').then(snap=>{
+        const data=snap.val()||{};
+        ['state','pairs','boards','movements','approvals','archives','logs'].forEach(k=>{
+          if(data[k]!==undefined){
+            _fbCache[k]=data[k];
+            localStorage.setItem('bm_'+k,JSON.stringify(data[k]));
+          }
+        });
+        // Now subscribe for live updates
         ['state','pairs','boards','movements','approvals','archives','logs'].forEach(k=>fbSubscribe(k));
-        // Wait for Firebase data then go directly to table panel (bypass login)
-        setTimeout(()=>{
-          role='table';
-          document.getElementById('loginScreen').style.display='none';
-          document.getElementById('app').style.display='flex';
-          document.getElementById('topbarRole').textContent='Table';
-          refreshTopbar();
-          toast('📱 Connected: '+tid);
-          renderPanel();
-        },1200);
-      }
+        toast('📱 Connected: '+tid);
+        renderPanel();
+      }).catch(()=>{
+        // Fallback
+        ['state','pairs','boards','movements','approvals','archives','logs'].forEach(k=>fbSubscribe(k));
+        setTimeout(()=>renderPanel(),1500);
+      });
     },300);
   }
 })();
