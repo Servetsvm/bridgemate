@@ -1110,7 +1110,7 @@ function renderTableDetail(tableNo){
   const totalBoards=boardList.length;
   const nsNum=m.ns?m.ns.replace(/[^0-9]/g,''):'?';
   const ewNum=m.ew?m.ew.replace(/[^0-9]/g,''):'?';
-  const lcdLine1=`RND ${String(s.currentRound).padStart(2,' ')}  NS:${nsNum.padStart(2,' ')} EW:${ewNum.padStart(2,' ')} B${m.boardStart||'?'}-${m.boardEnd||'?'}`;
+  const lcdLine1=`RND ${String(s.currentRound).padStart(2,' ')}  TBL:${String(tableNo).padStart(2,' ')}  B${(m.boardStart||'?')}-${(m.boardEnd||'?')}`;
 
   const approvals=getApprovals();
   // Find the next (first un-done) board to play
@@ -1164,8 +1164,8 @@ function renderTableDetail(tableNo){
       </div>
       <div class="bm-lcd">
         <div class="bm-lcd-row inv">${lcdLine1.slice(0,20).padEnd(20)}</div>
-        <div class="bm-lcd-row">NS: ${nsName.slice(0,16).padEnd(16)}</div>
-        <div class="bm-lcd-row">EW: ${ewName.slice(0,16).padEnd(16)}</div>
+        <div class="bm-lcd-row">NS${nsNum.padStart(2,' ')}: ${nsName.slice(0,14).padEnd(14)}</div>
+        <div class="bm-lcd-row">EW${ewNum.padStart(2,' ')}: ${ewName.slice(0,14).padEnd(14)}</div>
         <div class="bm-lcd-row">${s.scoring==='IMP'?'IMP':'MP'} SCORING          </div>
       </div>
       <div id="boardsSection">
@@ -1316,7 +1316,8 @@ window.bmShowWaiting=function(tableNo){
       <div class="bm-lcd">
         <div class="bm-lcd-row inv">TABLE ${String(tableNo).padStart(2,' ')}  ROUND ${String(nextR).padStart(2,' ')}    </div>
         <div class="bm-lcd-row">WAITING FOR PLAYERS</div>
-        <div class="bm-lcd-row blink">NS:${(nextNS.name||'').slice(0,6).padEnd(6)} EW:${(nextEW.name||'').slice(0,6).padEnd(6)} </div>
+        <div class="bm-lcd-row">NS: ${(nextNS.name||'').slice(0,16).padEnd(16)}</div>
+        <div class="bm-lcd-row">EW: ${(nextEW.name||'').slice(0,16).padEnd(16)}</div>
         <div class="bm-lcd-row">BOARDS ${nextM.boardStart||'?'} TO ${nextM.boardEnd||'?'}      </div>
       </div>
       <div class="waiting-screen">
@@ -1456,6 +1457,13 @@ function renderBoardForm(boardNo,vuln,existing){
   const lcdVuln=vuln==='Both'?'BOTH VUL':vuln==='None'?'NO VUL':vuln+' VUL';
   const s=getState();
   const m=getMovements()[s.currentRound+'_'+bmTableNo]||{};
+  const pairs=getPairs();
+  const nsPair=pairs[m.ns]||{name:''};
+  const ewPair=pairs[m.ew]||{name:''};
+  const nsNum=(m.ns||'').replace(/[^0-9]/g,'');
+  const ewNum=(m.ew||'').replace(/[^0-9]/g,'');
+  const nsName=nsPair.name&&nsPair.name.trim()?nsPair.name:'NS '+nsNum;
+  const ewName=ewPair.name&&ewPair.name.trim()?ewPair.name:'EW '+ewNum;
 
   document.getElementById('panelContent').innerHTML=`
     <div class="bm-device" style="max-width:360px;">
@@ -1466,8 +1474,9 @@ function renderBoardForm(boardNo,vuln,existing){
         ${existing?'<span style="font-size:0.7rem;color:var(--text3);">(editing)</span>':''}
       </div>
       <div class="bm-lcd" id="lcdDisplay">
-        <div class="bm-lcd-row inv">RND ${String(s.currentRound).padStart(2,' ')}  NS:${(m.ns||'').replace(/[^0-9]/g,'').padStart(2,' ')} EW:${(m.ew||'').replace(/[^0-9]/g,'').padStart(2,' ')}  B${boardNo}</div>
-        <div class="bm-lcd-row">BOARD : ${String(boardNo).padStart(2,' ')}             </div>
+        <div class="bm-lcd-row inv">RND ${String(s.currentRound).padStart(2,' ')}  TBL:${String(bmTableNo).padStart(2,' ')}  B${boardNo}  ${lcdVuln.slice(0,7)}</div>
+        <div class="bm-lcd-row">NS${nsNum.padStart(2,' ')}: ${nsName.slice(0,14).padEnd(14)}</div>
+        <div class="bm-lcd-row">EW${ewNum.padStart(2,' ')}: ${ewName.slice(0,14).padEnd(14)}</div>
         <div class="bm-lcd-row" id="lcdContr">CONTR : -              </div>
         <div class="bm-lcd-row" id="lcdLead">LEAD  : -              </div>
         <div class="bm-lcd-row" id="lcdResult">RESULT: -              </div>
