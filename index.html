@@ -1281,28 +1281,39 @@ window.bmShowWaiting=function(tableNo){
 window.bmShowNewPlayers=function(tableNo,roundNo){
   const movements=getMovements();const pairs=getPairs();const s=getState();
   const m=movements[roundNo+'_'+tableNo]||{};
-  const nsPair=pairs[m.ns]||{name:'—',isPhantom:false};
-  const ewPair=pairs[m.ew]||{name:'—',isPhantom:false};
-  const nsNum=m.ns?m.ns.replace(/[^0-9]/g,''):'?';
-  const ewNum=m.ew?m.ew.replace(/[^0-9]/g,''):'?';
+  const nsPair=pairs[m.ns]||{name:'',isPhantom:false};
+  const ewPair=pairs[m.ew]||{name:'',isPhantom:false};
+
+  function isDefault(nm){return !nm||/^(Pair\s*\d+|NS\s*\d+|EW\s*\d+|P\d+)$/i.test(nm.trim());}
+
+  function pairBox(pairObj,pairKey,side,label,boxClass){
+    const nm=(pairObj.name||'').trim();
+    const hasName=!isDefault(nm);
+    const parts=nm.split('&').map(x=>x.trim());
+    const nameHTML=hasName
+      ? `<div style="font-weight:700;font-size:0.95rem;color:var(--text);margin-top:4px;line-height:1.4;">${parts.join('<br>')}</div>`
+      : `<div style="font-size:0.78rem;color:var(--text3);margin-top:4px;font-style:italic;">No name set</div>`;
+    return `<div class="pair-box ${boxClass}">
+      <div class="pb-label">${label}</div>
+      ${nameHTML}
+      ${pairObj.isPhantom?'<div style="font-size:0.75rem;color:var(--purple);margin-top:4px;">👻 Phantom</div>':''}
+      <button class="btn btn-ghost btn-sm" style="margin-top:8px;width:100%;font-size:0.7rem;" onclick="bmNewRoundNameEntry(${tableNo},${roundNo},'${pairKey}','${side}')">✏️ ${hasName?'Edit name':'Enter name'}</button>
+    </div>`;
+  }
 
   document.getElementById('panelContent').innerHTML=`
     <div class="bm-device" style="max-width:360px;">
+      <div class="bm-lcd" style="margin-bottom:12px;">
+        <div class="bm-lcd-row inv">TABLE ${String(tableNo).padStart(2,' ')}  ROUND ${String(roundNo).padStart(2,' ')}    </div>
+        <div class="bm-lcd-row">NS: ${(nsPair.name||'—').slice(0,16).padEnd(16)}</div>
+        <div class="bm-lcd-row">EW: ${(ewPair.name||'—').slice(0,16).padEnd(16)}</div>
+        <div class="bm-lcd-row">BOARDS ${m.boardStart||'?'} TO ${m.boardEnd||'?'}      </div>
+      </div>
       <div class="new-players-screen">
         <div class="np-title">✅ Round ${roundNo} — Table ${tableNo}</div>
-        <div class="pair-confirm">
-          <div class="pair-box pair-box-ns">
-            <div class="pb-label">🔵 North-South</div>
-            <div class="pb-num">${nsNum}</div>
-            <div class="pb-name">${nsPair.name||'No name'}</div>
-            <span onclick="editPairNameTable('${nsNum}')" style="font-size:0.65rem;color:var(--gold);cursor:pointer;display:block;margin-top:3px;">✏️ isim gir</span>
-          </div>
-          <div class="pair-box pair-box-ew">
-            <div class="pb-label">🟡 East-West</div>
-            <div class="pb-num">${ewNum}</div>
-            <div class="pb-name">${ewPair.name||'No name'}${ewPair.isPhantom?' 👻':''}</div>
-            <span onclick="editPairNameTable('${ewNum}')" style="font-size:0.65rem;color:var(--gold);cursor:pointer;display:block;margin-top:3px;">✏️ isim gir</span>
-          </div>
+        <div class="pair-confirm" id="newRoundPairBoxes">
+          ${pairBox(nsPair,m.ns,'ns','🔵 North-South','pair-box-ns')}
+          ${pairBox(ewPair,m.ew,'ew','🟡 East-West','pair-box-ew')}
         </div>
         <div style="background:var(--surface2);border-radius:8px;padding:12px;margin-bottom:16px;">
           <div style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Boards to play</div>
@@ -1312,6 +1323,40 @@ window.bmShowNewPlayers=function(tableNo,roundNo){
         <button class="btn btn-green btn-full" onclick="bmStartNewRound(${tableNo},${roundNo})">✅ OK — Start Playing</button>
       </div>
     </div>`;
+};
+
+window.bmNewRoundNameEntry=function(tableNo,roundNo,pairKey,side){
+  const pairs=getPairs();
+  const pair=pairs[pairKey]||{};
+  const nm=(pair.name||'').trim();
+  const isDefault=!nm||/^(Pair\s*\d+|NS\s*\d+|EW\s*\d+|P\d+)$/i.test(nm);
+  const parts=isDefault?['','']:nm.split('&').map(x=>x.trim());
+  const p1=parts[0]||'';const p2=parts[1]||'';
+  const sideLabel=side==='ns'?'🔵 NS':'🟡 EW';
+  openModal(`✏️ ${sideLabel} — Enter Names`,`
+    <div class="field">
+      <label>Player 1 — Full Name</label>
+      <input id="rnP1" value="${p1}" placeholder="e.g. John Smith" style="font-size:1rem;" onkeydown="if(event.key==='Enter')document.getElementById('rnP2').focus()">
+    </div>
+    <div class="field">
+      <label>Player 2 — Full Name</label>
+      <input id="rnP2" value="${p2}" placeholder="e.g. Jane Doe" style="font-size:1rem;" onkeydown="if(event.key==='Enter')bmSaveNewRoundName('${pairKey}',${tableNo},${roundNo})">
+    </div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+     <button class="btn btn-gold" onclick="bmSaveNewRoundName('${pairKey}',${tableNo},${roundNo})">✅ Save</button>`);
+  setTimeout(()=>document.getElementById('rnP1')?.focus(),150);
+};
+
+window.bmSaveNewRoundName=function(pairKey,tableNo,roundNo){
+  const p1=(document.getElementById('rnP1')?.value||'').trim();
+  const p2=(document.getElementById('rnP2')?.value||'').trim();
+  const name=p1&&p2?p1+' & '+p2:p1||p2||'';
+  if(name){
+    const pairs=getPairs();
+    if(pairs[pairKey]){pairs[pairKey].name=name;setPairs(pairs);toast('✅ Saved: '+name);}
+  }
+  closeModal();
+  bmShowNewPlayers(tableNo,roundNo);
 };
 
 window.bmStartNewRound=function(tableNo,roundNo){
