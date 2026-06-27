@@ -819,9 +819,9 @@ function clearTableSession(){
   // Check for saved table session hint
   const sess=getTableSession();
   if(sess){
-    selRole('table');
+    // Don't auto-switch role, just show hint if already on table tab
     const err=document.getElementById('loginErr');
-    if(err) err.innerHTML='<div style="color:var(--gold);font-size:0.75rem;">📍 Table '+sess.tableNo+' session — enter password to resume</div>';
+    if(err&&role==='table') err.innerHTML='<div style="color:var(--gold);font-size:0.75rem;">📍 Table '+sess.tableNo+' session — enter password to resume</div>';
   }
 })();
 
@@ -1077,7 +1077,7 @@ function adminBuildNamesGrid(tableCount){
 }
 
 window.adminSaveSetup=function(){
-  const name=document.getElementById('tName')?.value.trim()||'Bridge Tournament';
+  const name=document.getElementById('tName')?.value.trim()||'';
   const tableCount=parseInt(document.getElementById('tTables')?.value||2);
   const boardsPerRound=parseInt(document.getElementById('tBPR')?.value||3);
   const totalBoards=parseInt(document.getElementById('tBoards')?.value||24);
@@ -1135,10 +1135,8 @@ window.adminClearNames=function(){
 };
 
 window.adminStart=function(){
-  if(_adminBusy){toast('Please wait...');return;}
-  _adminBusy=true;
   const s=getState();
-  if(!s.tableCount||s.tableCount<2){toast('❌ Set up tournament first');_adminBusy=false;return;}
+  if(!s.tableCount||s.tableCount<2){toast('❌ Set up tournament first');return;}
 
   // Create tourneyId & set in Firebase
   const tid=makeTourneyId();
@@ -1169,7 +1167,6 @@ window.adminStart=function(){
   localStorage.setItem('bm_adminSessionSnap','1');
 
   addLog('ok','Tournament started',s.name+' | '+s.tableCount+' tables | '+s.movement);
-  _adminBusy=false;
   toast('🚀 Tournament started!');
   playSound('ok');
   adminTab='overview';
