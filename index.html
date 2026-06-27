@@ -462,7 +462,7 @@ function onFbUpdate(key){
     else if(role==='table'&&bmTableNo){
       const pc=document.getElementById('panelContent');
       // Only auto-refresh the board list view, not form views
-      if(pc&&pc.querySelector('#boardsList')) renderTableDetail(bmTableNo);
+      if(pc&&pc.querySelector('#boardsList')&&!pc.querySelector('.approval-screen')) renderTableDetail(bmTableNo);
       if(pc&&pc.querySelector('#otherTablesDiv')) updateOtherTables();
       // Director broadcast
       if(key==='messages') checkBroadcast();
@@ -1924,8 +1924,8 @@ window.bmShowNameConfirm=function(tableNo,pairKey,loadedName,m){
   <div class="bm-device">
     <div class="bm-lcd">
       <div class="bm-lcd-row inv">TABLE ${String(tableNo).padStart(2,' ')}  RND ${String(s.currentRound).padStart(2,' ')}  ${bmSide.toUpperCase()}    </div>
-      <div class="bm-lcd-row">NS${nsNum.padStart(2,' ')}: ${(pairs[m.ns]?.name||'NS '+nsNum).slice(0,14).padEnd(14)}</div>
-      <div class="bm-lcd-row">EW${ewNum.padStart(2,' ')}: ${(pairs[m.ew]?.name||'EW '+ewNum).slice(0,14).padEnd(14)}</div>
+      <div class="bm-lcd-row">N${nsNum.padEnd(2,' ')}:${(pairs[m.ns]?.name||'NS '+nsNum).slice(0,17).padEnd(17)}</div>
+      <div class="bm-lcd-row">E${ewNum.padEnd(2,' ')}:${(pairs[m.ew]?.name||'EW '+ewNum).slice(0,17).padEnd(17)}</div>
       <div class="bm-lcd-row">BOARDS ${m.boardStart||'?'} TO ${m.boardEnd||'?'}         </div>
     </div>
     <div class="card">
@@ -1967,8 +1967,8 @@ window.bmShowNameEntry=function(tableNo,pairKey,prefill,m){
   <div class="bm-device">
     <div class="bm-lcd">
       <div class="bm-lcd-row inv">TABLE ${String(tableNo).padStart(2,' ')}  RND ${String(s.currentRound).padStart(2,' ')}  ${bmSide.toUpperCase()}    </div>
-      <div class="bm-lcd-row">NS${nsNum.padStart(2,' ')}: ${(pairs[m.ns]?.name||'NS '+nsNum).slice(0,14).padEnd(14)}</div>
-      <div class="bm-lcd-row">EW${ewNum.padStart(2,' ')}: ${(pairs[m.ew]?.name||'EW '+ewNum).slice(0,14).padEnd(14)}</div>
+      <div class="bm-lcd-row">N${nsNum.padEnd(2,' ')}:${(pairs[m.ns]?.name||'NS '+nsNum).slice(0,17).padEnd(17)}</div>
+      <div class="bm-lcd-row">E${ewNum.padEnd(2,' ')}:${(pairs[m.ew]?.name||'EW '+ewNum).slice(0,17).padEnd(17)}</div>
       <div class="bm-lcd-row blink">ENTER YOUR NAMES      </div>
     </div>
     <div class="card">
@@ -2062,6 +2062,17 @@ function _renderTableDetail(tableNo){
   const myApprovalKey='approval_'+tableNo+'_'+s.currentRound+'_'+bmSide;
   const needsMyApproval=approvals[myApprovalKey+'_needed'];
 
+  // If we need to approve something, show approval screen immediately
+  if(needsMyApproval){
+    const boards2=getBoards();
+    const bd2=boards2[needsMyApproval];
+    if(bd2&&bd2.status==='pending'){
+      const[t2,r2,b2]=needsMyApproval.split('_');
+      bmShowApprovalRequest(tableNo,parseInt(b2),needsMyApproval,bd2);
+      return;
+    }
+  }
+
   // LCD content
   const lcdLine1=`TABLE ${String(tableNo).padStart(2,' ')}  RND ${String(s.currentRound).padStart(2,' ')}  ${s.scoring.padStart(3,' ')} `;
 
@@ -2119,8 +2130,8 @@ function _renderTableDetail(tableNo){
   <div class="bm-device">
     <div class="bm-lcd">
       <div class="bm-lcd-row inv">${lcdLine1}</div>
-      <div class="bm-lcd-row">NS${nsNum.padStart(2,' ')}: ${nsName.slice(0,14).padEnd(14)}</div>
-      <div class="bm-lcd-row">EW${ewNum.padStart(2,' ')}: ${ewName.slice(0,14).padEnd(14)}</div>
+      <div class="bm-lcd-row">N${nsNum.padEnd(2,' ')}:${nsName.slice(0,17).padEnd(17)}</div>
+      <div class="bm-lcd-row">E${ewNum.padEnd(2,' ')}:${ewName.slice(0,17).padEnd(17)}</div>
       <div class="bm-lcd-row">BOARDS ${m.boardStart||'?'} TO ${m.boardEnd||'?'} ${allDone?'DONE   ':'       '}</div>
     </div>
     ${isPhantom?`<div class="director-bar">👻 Phantom pair — no entry needed, award Average</div>`:''}
@@ -2190,8 +2201,8 @@ function _renderBoardForm(tableNo,boardNo){
   <div class="bm-device">
     <div class="bm-lcd" id="lcdDisplay">
       <div class="bm-lcd-row inv">TBL${String(tableNo).padStart(2,' ')} RND${String(s.currentRound).padStart(2,' ')} BRD${String(boardNo).padStart(2,' ')} ${vuln.slice(0,4).padEnd(4)}</div>
-      <div class="bm-lcd-row">NS${nsNum.padStart(2,' ')}: ${nsPair.name.slice(0,14).padEnd(14)}</div>
-      <div class="bm-lcd-row">EW${ewNum.padStart(2,' ')}: ${ewPair.name.slice(0,14).padEnd(14)}</div>
+      <div class="bm-lcd-row">N${nsNum.padEnd(2,' ')}:${nsPair.name.slice(0,17).padEnd(17)}</div>
+      <div class="bm-lcd-row">E${ewNum.padEnd(2,' ')}:${ewPair.name.slice(0,17).padEnd(17)}</div>
       <div class="bm-lcd-row" id="lcdContr">CONTR: ${lcdContr.padEnd(15)}</div>
       <div class="bm-lcd-row" id="lcdResult">LEAD : -    RESULT: ${lcdResult.padEnd(4)}</div>
     </div>
