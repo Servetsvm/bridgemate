@@ -945,7 +945,9 @@ window.bmSelectTable=function(){
   const m=movements[mk]||{};
   const pairKey=bmSide==='ns'?m.ns:m.ew;
   const pair=pairs[pairKey]||{};
-  const hasRealName=pair.name&&pair.name.trim()&&!pair.name.startsWith('Pair ');
+  const nm=(pair.name||'').trim();
+  const isDefault=!nm||/^(Pair\s+\d+|NS\s+\d+|EW\s+\d+|P\d+)$/i.test(nm);
+  const hasRealName=!isDefault;
   if(hasRealName){
     // Names already loaded from admin — show confirmation screen
     bmShowNameConfirm(n,pairKey,pair.name);
