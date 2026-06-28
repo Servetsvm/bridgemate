@@ -327,6 +327,7 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
       <span class="topbar-round" id="topbarRound" style="display:none;"></span>
     </div>
     <div class="topbar-right">
+      <span id="connBadge" style="font-size:0.65rem;padding:2px 8px;border-radius:10px;background:var(--greendim);color:var(--green);border:1px solid rgba(76,175,125,0.3);">🟢 Online</span>
       <button class="tbtn" onclick="toggleTheme()">🌓</button>
       <button class="tbtn" onclick="doLogout()">Logout</button>
     </div>
@@ -672,8 +673,23 @@ window.doLogin=async function(){
   }
 
   refreshTopbar();renderPanel();
-  DB.subscribe('state',()=>{refreshTopbar();if(role!=='admin')renderPanel();});
-  if(role==='admin') DB.subscribe('approvals',()=>{if(adminTab==='setup')renderAdminTab();});
+  DB.subscribe('state',()=>{
+    refreshTopbar();
+    if(role!=='admin') renderPanel();
+    else if(adminTab==='setup') { const c=document.getElementById('adminContent'); if(c)c.innerHTML=renderSetup(); }
+    // Round complete notification
+    if(role==='admin') checkRoundComplete();
+  });
+  DB.subscribe('pairs',()=>{ if(role==='admin'&&(adminTab==='players'||adminTab==='tables'))renderAdminTab(); });
+  DB.subscribe('boards',()=>{
+    if(role==='admin') { if(adminTab==='setup'||adminTab==='tables'||adminTab==='boards')renderAdminTab(); checkRoundComplete(); }
+    if(role==='screen') renderPanel();
+  });
+  DB.subscribe('approvals',()=>{
+    if(role==='admin'&&adminTab==='setup') renderAdminTab();
+    if(role==='table'&&bmTableNo) bmPollApprovals(bmTableNo);
+  });
+  DB.subscribe('tableLocks',()=>{ _cache['tableLocks']=null; DB.get('tableLocks'); });
 };
 window.sessionContinue=function(){renderAdminPanel();};
 window.sessionNew=function(){
@@ -1133,10 +1149,21 @@ window.bmShowNewPlayers=function(tableNo,roundNo){
       </div>
     </div>`;
 
-  // Focus first empty field
+  // Focus first empty field + wire autocomplete
   setTimeout(()=>{
     const f=['ns1inp','ns2inp','ew1inp','ew2inp'].find(id=>!document.getElementById(id)?.value);
     if(f)document.getElementById(f)?.focus();
+    // Autocomplete from PlayerDB
+    const suggestions = PlayerDB.getAll();
+    if(suggestions.length){
+      ['ns1inp','ns2inp','ew1inp','ew2inp'].forEach(id=>{
+        const inp = document.getElementById(id); if(!inp)return;
+        inp.setAttribute('list','playerSuggestions');
+      });
+      let dl = document.getElementById('playerSuggestions');
+      if(!dl){ dl=document.createElement('datalist'); dl.id='playerSuggestions'; document.body.appendChild(dl); }
+      dl.innerHTML = suggestions.slice(0,50).map(n=>`<option value="${n.replace(/"/g,'&quot;')}">`).join('');
+    }
   },80);
 };
 
@@ -1149,6 +1176,8 @@ window.bmConfirmPlayersAndStart=function(tableNo,roundNo,nsId,ewId){
   if(nsId&&p[nsId]){p[nsId].name=joinPairName(ns1,ns2);}
   if(ewId&&p[ewId]){p[ewId].name=joinPairName(ew1,ew2);}
   setPairs(p);
+  // Save to local player memory
+  PlayerDB.save([ns1,ns2,ew1,ew2].filter(Boolean));
   if(ns1||ns2||ew1||ew2)addLog('ok','Oyuncu isimleri girildi',`T${tableNo} R${roundNo}: ${joinPairName(ns1,ns2)} vs ${joinPairName(ew1,ew2)}`);
   // Re-lock for the new round
   lockTable(tableNo);
@@ -1849,11 +1878,75 @@ let adminRefreshTimer=null;
 function adminSetupAutoRefresh(){
   if(adminRefreshTimer)clearInterval(adminRefreshTimer);
   adminRefreshTimer=setInterval(()=>{
-    if(adminTab==='setup'&&role==='admin'){
-      const c=document.getElementById('adminContent');
-      if(c)c.innerHTML=renderSetup();
+    if(role==='admin'){
+      if(adminTab==='setup'){ const c=document.getElementById('adminContent'); if(c)c.innerHTML=renderSetup(); }
+      checkRoundComplete();
     }
-  },5000);
+  },4000);
+}
+
+let _lastRoundCompleteNotified = -1;
+function checkRoundComplete(){
+  const s = getState();
+  if(s.status !== 'running') return;
+  const boards = getBoards();
+  const movements = getMovements();
+  let total=0, done=0;
+  for(let t=1;t<=s.tableCount;t++){
+    const m = movements[s.currentRound+'_'+t]||{};
+    for(let b=m.boardStart||1;b<=(m.boardEnd||3);b++){
+      total++;
+      if(boards[t+'_'+s.currentRound+'_'+b]?.status==='done') done++;
+    }
+  }
+  const allDone = total>0 && done>=total;
+  if(allDone && _lastRoundCompleteNotified !== s.currentRound){
+    _lastRoundCompleteNotified = s.currentRound;
+    showRoundCompleteAlert(s.currentRound, s.roundCount, done, total);
+  }
+}
+
+function showRoundCompleteAlert(round, totalRounds, done, total){
+  // Play a beep
+  try{
+    const ctx = new (window.AudioContext||window.webkitAudioContext)();
+    [440,550,660].forEach((f,i)=>{
+      const o=ctx.createOscillator(); const g=ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.frequency.value=f; g.gain.setValueAtTime(0.3,ctx.currentTime+i*0.15);
+      g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+i*0.15+0.25);
+      o.start(ctx.currentTime+i*0.15); o.stop(ctx.currentTime+i*0.15+0.3);
+    });
+  }catch(e){}
+
+  const isLast = round >= totalRounds;
+  const el = document.getElementById('roundCompleteAlert');
+  if(el) el.remove();
+
+  const div = document.createElement('div');
+  div.id = 'roundCompleteAlert';
+  div.style.cssText = 'position:fixed;top:60px;left:50%;transform:translateX(-50%);z-index:9000;max-width:380px;width:90%;background:var(--surface);border:2px solid var(--green);border-radius:var(--radius);padding:16px 18px;box-shadow:0 8px 32px rgba(0,0,0,0.5);animation:fadeUp 0.3s ease;';
+  div.innerHTML = `
+    <div style="display:flex;align-items:flex-start;gap:12px;">
+      <span style="font-size:2rem;">${isLast?'🏁':'✅'}</span>
+      <div style="flex:1;">
+        <div style="font-weight:700;color:var(--green);font-size:0.95rem;margin-bottom:4px;">
+          ${isLast ? 'Tournament Complete!' : `Round ${round} Complete!`}
+        </div>
+        <div style="font-size:0.78rem;color:var(--text2);margin-bottom:12px;">
+          ${done}/${total} boards done${isLast?'. All rounds finished!':'. Ready for Round '+(round+1)+'.'}
+        </div>
+        <div style="display:flex;gap:8px;">
+          ${isLast
+            ? `<button class="btn btn-blue btn-sm" onclick="adminFinish();document.getElementById('roundCompleteAlert')?.remove()">🏁 Finish Tournament</button>`
+            : `<button class="btn btn-green btn-sm" onclick="adminNextRound();document.getElementById('roundCompleteAlert')?.remove()">▶ Start Round ${round+1}</button>`}
+          <button class="btn btn-ghost btn-sm" onclick="this.closest('#roundCompleteAlert').remove()">Dismiss</button>
+        </div>
+      </div>
+    </div>`;
+  document.body.appendChild(div);
+  // Auto-dismiss after 30s
+  setTimeout(()=>div.remove(), 30000);
 }
 window.adminFinish=function(){
   if(!confirm('Finish tournament?'))return;
@@ -1905,7 +1998,31 @@ window.adminReset=async function(){
   toast('🗑 Reset complete');refreshTopbar();renderAdminTab();
 };
 
-// ── Players Admin ──
+// ── Player Database (local memory for name suggestions) ──
+const PlayerDB = {
+  getAll(){ try{ return JSON.parse(localStorage.getItem('bm_playerdb')||'[]'); }catch{return[];} },
+  save(names){
+    const db = this.getAll();
+    names.forEach(n=>{ n=n.trim(); if(n&&!db.includes(n))db.unshift(n); });
+    if(db.length>200)db.splice(200);
+    localStorage.setItem('bm_playerdb', JSON.stringify(db));
+  },
+  clear(){ localStorage.removeItem('bm_playerdb'); }
+};
+
+// Save names from pairs to PlayerDB
+function syncNamesToPlayerDB(){
+  const pairs = getPairs();
+  const names = [];
+  Object.values(pairs).forEach(p=>{
+    if(p.isPhantom||!p.name)return;
+    const [p1,p2] = splitPairName(p.name);
+    if(p1)names.push(p1);
+    if(p2)names.push(p2);
+  });
+  PlayerDB.save(names);
+}
+
 // ── Players Admin ──
 function splitPairName(name){
   // Split "Alice Smith & Bob Jones" → ["Alice Smith","Bob Jones"]
@@ -1991,6 +2108,7 @@ window.updatePairSlot=function(id,slot,val){
   const [p1,p2]=splitPairName(p[id].name);
   p[id].name=slot===1?joinPairName(val,p2):joinPairName(p1,val);
   setPairs(p);
+  if(val.trim())PlayerDB.save([val.trim()]);
 };
 
 window.addPlayer=function(){
@@ -2570,6 +2688,23 @@ function renderLog(){
 // ── Init ──
 document.getElementById('loginScreen').style.display='flex';
 document.getElementById('app').style.display='none';
+
+// Connectivity monitor
+(function(){
+  function updateConn(){
+    const b=document.getElementById('connBadge'); if(!b)return;
+    if(navigator.onLine){
+      b.style.background='var(--greendim)';b.style.color='var(--green)';
+      b.style.borderColor='rgba(76,175,125,0.3)';b.textContent='🟢 Online';
+    } else {
+      b.style.background='var(--reddim)';b.style.color='var(--red)';
+      b.style.borderColor='rgba(224,90,78,0.3)';b.textContent='🔴 Offline';
+    }
+  }
+  window.addEventListener('online', updateConn);
+  window.addEventListener('offline', updateConn);
+  setInterval(updateConn, 5000);
+})();
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape')closeModal();
   if(e.key==='Enter'&&document.activeElement?.id==='pwInput')doLogin();
