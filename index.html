@@ -353,26 +353,57 @@ window.toggleTheme=function(){const h=document.documentElement;const n=h.getAttr
 // ══════════════════════════════════════════════════════
 //  DATA LAYER
 // ══════════════════════════════════════════════════════
+// ── Firebase REST DB ──
+const FBURL='https://bridgemate-77c72-default-rtdb.europe-west1.firebasedatabase.app/bm';
+const _cache={};
 const DB={
-  get(k){try{return JSON.parse(localStorage.getItem('bm_'+k))||null}catch{return null}},
-  set(k,v){localStorage.setItem('bm_'+k,JSON.stringify(v))},
-  del(k){localStorage.removeItem('bm_'+k)}
+  async get(k){
+    try{const r=await fetch(FBURL+'/'+k+'.json',{cache:'no-store'});
+      if(!r.ok)return _cache[k]||null;
+      const v=await r.json();_cache[k]=v;return v;
+    }catch(e){return _cache[k]||null;}
+  },
+  async set(k,v){
+    _cache[k]=v;
+    try{await fetch(FBURL+'/'+k+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)});}
+    catch(e){console.warn('FB write fail',k);}
+  },
+  async del(k){
+    delete _cache[k];
+    try{await fetch(FBURL+'/'+k+'.json',{method:'DELETE'});}
+    catch(e){}
+  },
+  subscribe(k,cb){
+    let last=undefined;
+    const poll=async()=>{
+      try{const r=await fetch(FBURL+'/'+k+'.json',{cache:'no-store'});
+        if(r.ok){const v=await r.json();const s=JSON.stringify(v);
+          if(s!==last){last=s;_cache[k]=v;cb(v);}
+        }
+      }catch(e){}
+      setTimeout(poll,2000);
+    };
+    poll();
+  }
 };
-const getState=()=>DB.get('state')||{name:'Bridge Tournament',tableCount:0,boardsPerRound:3,totalBoards:0,roundCount:0,currentRound:0,status:'setup',movement:'mitchell',phantom:false,scoring:'MP'};
+const getState=()=>_cache['state']||{name:'Bridge Tournament',tableCount:0,boardsPerRound:3,totalBoards:0,roundCount:0,currentRound:0,status:'setup',movement:'mitchell',phantom:false,scoring:'MP'};
 const setState=s=>DB.set('state',s);
-const getPairs=()=>DB.get('pairs')||{};
+const getPairs=()=>_cache['pairs']||{};
 const setPairs=p=>DB.set('pairs',p);
-const getBoards=()=>DB.get('boards')||{};
+const getBoards=()=>_cache['boards']||{};
 const setBoards=b=>DB.set('boards',b);
-const getMovements=()=>DB.get('movements')||{};
+const getMovements=()=>_cache['movements']||{};
 const setMovements=m=>DB.set('movements',m);
-const getLogs=()=>DB.get('logs')||[];
-const getArchives=()=>DB.get('archives')||[];
+const getLogs=()=>_cache['logs']||[];
+const getArchives=()=>_cache['archives']||[];
 const setArchives=a=>DB.set('archives',a);
-
-// Score approval storage: key = tableNo_round_boardNo, val = {nsScore, contract, side: 'ns'|'ew', status: 'pending'|'approved'}
-const getApprovals=()=>DB.get('approvals')||{};
+const getApprovals=()=>_cache['approvals']||{};
 const setApprovals=a=>DB.set('approvals',a);
+
+async function preloadCache(){
+  const keys=['state','pairs','boards','movements','logs','archives','approvals','tableLocks'];
+  await Promise.all(keys.map(k=>DB.get(k)));
+}
 
 function addLog(type,msg,detail=''){
   const l=getLogs();l.unshift({id:Date.now(),type,msg,detail,time:new Date().toLocaleTimeString()});
@@ -530,20 +561,13 @@ const DEFAULT_PASS = {admin:'2370', table:'1234'};
 let _cachedPass = null;
 
 // ── Online-only enforcement ──
-(function enforceOnline(){
+{
   const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '';
   if(isLocal){
-    document.body.innerHTML = `
-      <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0f0e0c;font-family:'DM Sans',sans-serif;">
-        <div style="max-width:380px;text-align:center;padding:40px 24px;background:#1a1916;border:1px solid #c9a84c;border-radius:12px;">
-          <div style="font-size:3rem;margin-bottom:12px;">⛔</div>
-          <div style="font-family:'Playfair Display',serif;font-size:1.5rem;color:#c9a84c;margin-bottom:10px;">Online Only</div>
-          <div style="color:#9a958c;font-size:0.88rem;line-height:1.6;">BridgeMate requires an internet connection and must be served from a hosted domain.<br><br>Please access this app via your GitHub Pages or Firebase Hosting URL.</div>
-        </div>
-      </div>`;
-    return; // stop here, don't load rest of app
+    document.body.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0f0e0c;font-family:sans-serif;"><div style="max-width:380px;text-align:center;padding:40px 24px;background:#1a1916;border:1px solid #c9a84c;border-radius:12px;"><div style="font-size:3rem;margin-bottom:12px;">&#x26D4;</div><div style="font-size:1.5rem;color:#c9a84c;margin-bottom:10px;">Online Only</div><div style="color:#9a958c;font-size:0.88rem;">BridgeMate requires an internet connection.<br>Please use the GitHub Pages URL.</div></div></div>';
+    throw new Error('Local environment - app stopped');
   }
-})();
+}
 
 // Load passwords from Firebase (falls back to defaults)
 async function loadPasswords(){
@@ -609,8 +633,7 @@ window.doLogin=async function(){
   if(role==='admin'&&pw!==PASS.admin){err.textContent='❌ Wrong password';return;}
   if(role==='table'&&pw!==PASS.table){err.textContent='❌ Wrong password';return;}
   if(role==='admin'){
-    const snap=localStorage.getItem('bm_adminSessionSnap');
-    const st=DB.get('state');
+    const st=getState();
     if(snap&&st&&st.status==='running'){
       // Ask user: new or continue
       document.getElementById('loginScreen').style.display='none';
@@ -635,22 +658,22 @@ window.doLogin=async function(){
   document.getElementById('loginScreen').style.display='none';
   document.getElementById('app').style.display='flex';
   document.getElementById('topbarRole').textContent=role==='admin'?'Admin':role==='table'?'Table':'Screen';
+  await preloadCache();
   refreshTopbar();renderPanel();
+  // Start real-time subscriptions
+  DB.subscribe('state', ()=>{ refreshTopbar(); if(role!=='admin') renderPanel(); });
+  if(role==='admin') DB.subscribe('approvals', ()=>renderPanel());
 };
 window.sessionContinue=function(){renderAdminPanel();};
 window.sessionNew=function(){
   if(!confirm('This will delete the current tournament. Are you sure?'))return;
-  ['state','pairs','boards','movements','logs','approvals'].forEach(k=>DB.del(k));
-  localStorage.removeItem('bm_adminSessionSnap');
-  renderAdminPanel();
+  Promise.all(['state','pairs','boards','movements','logs','approvals'].map(k=>DB.del(k))).then(()=>renderAdminPanel());
 };
 window.doLogout=function(){
   if(role==='table')unlockAllMyTables();
   if(role==='admin'){
-    const st=DB.get('state');
+    const st=getState();
     if(st&&st.status==='running'){
-      // Save snapshot for session restore
-      localStorage.setItem('bm_adminSessionSnap','1');
       if(!confirm('Admin sayfasindan cikiyorsunuz.\n\nWould you like to export a backup?\n(Cancel: Export, OK: Continue)')){
         adminExport();
       }
@@ -699,7 +722,7 @@ window.renderPanel=function(){
 //  TABLE LOCK SYSTEM — Soft warning only
 //  tableLocks: { "round_tableNo": { lockedAt } }
 // ══════════════════════════════════════════════════════
-const getTableLocks=()=>DB.get('tableLocks')||{};
+const getTableLocks=()=>_cache['tableLocks']||{};
 const setTableLocks=l=>DB.set('tableLocks',l);
 
 function tableLockKey(tableNo){
@@ -1796,6 +1819,7 @@ window.adminForceUnlock=function(tableNo){
   toast(`🔓 Masa ${tableNo} kilidi kaldırıldı`);
   renderAdminTab();
 };
+window.adminStart=function(){
   const s=getState();if(s.status!=='setup'){toast('Already started');return;}
   s.currentRound=1;s.status='running';setState(s);
   addLog('ok','Round 1 started','Tournament begins');
@@ -1863,9 +1887,10 @@ function applyImport(data){
   if(data.boards)setBoards(data.boards);if(data.movements)setMovements(data.movements);
   addLog('ok','Data imported','');closeModal();toast('✅ Imported!');refreshTopbar();renderAdminTab();
 }
-window.adminReset=function(){
+window.adminReset=async function(){
   if(!confirm('DELETE ALL DATA? This cannot be undone.'))return;
-  ['state','pairs','boards','movements','logs','approvals'].forEach(k=>DB.del(k));
+  await Promise.all(['state','pairs','boards','movements','logs','approvals'].map(k=>DB.del(k)));
+  Object.keys(_cache).forEach(k=>delete _cache[k]);
   toast('🗑 Reset complete');refreshTopbar();renderAdminTab();
 };
 
@@ -2106,8 +2131,9 @@ window.adminParseHandsText=function(){
   if(!raw){toast('❌ File is empty');return;}
   const hands=parsePBNorLIN(raw);
   if(!hands.length){toast('❌ Format not recognised');return;}
-  // Store as bm_hands
-  localStorage.setItem('bm_hands',JSON.stringify(hands));
+  // Store hands in Firebase cache
+  _cache['hands'] = hands;
+  DB.set('hands', hands);
   addLog('ok','Hand file loaded',hands.length+' board hand records');
   toast('✅ '+hands.length+' hands loaded!');
   closeModal();renderAdminTab();
@@ -2520,7 +2546,7 @@ function renderLog(){
   return`<div class="card">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
       <div class="card-title" style="margin:0;"><span>📋</span> System Log (${logs.length})</div>
-      <button class="btn btn-red btn-sm" onclick="if(confirm('Clear logs?')){DB.del('logs');renderAdminTab();}">Clear</button>
+      <button class="btn btn-red btn-sm" onclick="if(confirm('Clear logs?')){DB.del('logs').then(()=>{_cache['logs']=[];renderAdminTab();});}">Clear</button>
     </div>
     ${logs.map(l=>`<div class="log-item">
       <span style="font-size:0.9rem;">${l.type==='ok'?'✅':l.type==='warn'?'⚠️':'❌'}</span>
