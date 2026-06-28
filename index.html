@@ -512,9 +512,70 @@ function getNextRoundInfo(tableNo,currentRound,state,movements,pairs){
 }
 
 // ══════════════════════════════════════════════════════
+//  FIREBASE CONFIG — Replace with your own config
+// ══════════════════════════════════════════════════════
+const FIREBASE_CONFIG = {
+  apiKey: "YOUR_API_KEY",
+  authDomain: "YOUR_PROJECT.firebaseapp.com",
+  databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
+  projectId: "YOUR_PROJECT",
+  storageBucket: "YOUR_PROJECT.appspot.com",
+  messagingSenderId: "YOUR_SENDER_ID",
+  appId: "YOUR_APP_ID"
+};
+
+// Default passwords (used only if Firebase has no passwords node yet)
+const DEFAULT_PASS = {admin:'2370', table:'1234'};
+let _cachedPass = null;
+
+// ── Online-only enforcement ──
+(function enforceOnline(){
+  const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.hostname === '';
+  if(isLocal){
+    document.body.innerHTML = `
+      <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#0f0e0c;font-family:'DM Sans',sans-serif;">
+        <div style="max-width:380px;text-align:center;padding:40px 24px;background:#1a1916;border:1px solid #c9a84c;border-radius:12px;">
+          <div style="font-size:3rem;margin-bottom:12px;">⛔</div>
+          <div style="font-family:'Playfair Display',serif;font-size:1.5rem;color:#c9a84c;margin-bottom:10px;">Online Only</div>
+          <div style="color:#9a958c;font-size:0.88rem;line-height:1.6;">BridgeMate requires an internet connection and must be served from a hosted domain.<br><br>Please access this app via your GitHub Pages or Firebase Hosting URL.</div>
+        </div>
+      </div>`;
+    throw new Error('Offline access blocked');
+  }
+})();
+
+// Load passwords from Firebase (falls back to defaults)
+async function loadPasswords(){
+  if(_cachedPass) return _cachedPass;
+  try{
+    const res = await fetch(FIREBASE_CONFIG.databaseURL + '/config/passwords.json');
+    if(res.ok){
+      const data = await res.json();
+      if(data && data.admin && data.table){
+        _cachedPass = data;
+        return _cachedPass;
+      }
+    }
+  } catch(e){ console.warn('Firebase password fetch failed, using defaults'); }
+  _cachedPass = {...DEFAULT_PASS};
+  return _cachedPass;
+}
+
+// Save passwords to Firebase
+async function savePasswords(adminPw, tablePw){
+  const body = JSON.stringify({admin: adminPw, table: tablePw});
+  const res = await fetch(FIREBASE_CONFIG.databaseURL + '/config/passwords.json', {
+    method: 'PUT',
+    headers: {'Content-Type': 'application/json'},
+    body
+  });
+  if(!res.ok) throw new Error('Firebase write failed: ' + res.status);
+  _cachedPass = {admin: adminPw, table: tablePw};
+}
+
+// ══════════════════════════════════════════════════════
 //  AUTH
 // ══════════════════════════════════════════════════════
-const PASS={admin:'2370',table:'1234'};
 let role='admin';
 
 window.selRole=function(r){
@@ -527,11 +588,17 @@ window.selRole=function(r){
 };
 selRole('admin');
 
-window.doLogin=function(){
+window.doLogin=async function(){
   const err=document.getElementById('loginErr');err.textContent='';
   const pw=document.getElementById('pwInput').value;
-  if(role==='admin'&&pw!==PASS.admin){err.textContent='❌ Yanlis sifre';return;}
-  if(role==='table'&&pw!==PASS.table){err.textContent='❌ Yanlis sifre';return;}
+  const loginBtn=document.querySelector('.btn-primary');
+  if(loginBtn){loginBtn.disabled=true;loginBtn.textContent='Checking...';}
+  let PASS;
+  try{ PASS = await loadPasswords(); }
+  catch(e){ PASS = {...DEFAULT_PASS}; }
+  if(loginBtn){loginBtn.disabled=false;loginBtn.textContent='Login';}
+  if(role==='admin'&&pw!==PASS.admin){err.textContent='❌ Wrong password';return;}
+  if(role==='table'&&pw!==PASS.table){err.textContent='❌ Wrong password';return;}
   if(role==='admin'){
     const snap=localStorage.getItem('bm_adminSessionSnap');
     const st=DB.get('state');
@@ -545,11 +612,11 @@ window.doLogin=function(){
         <div style="max-width:420px;margin:40px auto;padding:0 14px;">
           <div class="card" style="text-align:center;border-color:var(--gold);">
             <div style="font-size:2rem;margin-bottom:10px;">⚠️</div>
-            <div style="font-size:1rem;font-weight:700;color:var(--gold);margin-bottom:6px;">Kaydedilmis turnuva bulundu</div>
+            <div style="font-size:1rem;font-weight:700;color:var(--gold);margin-bottom:6px;">Saved tournament found</div>
             <div style="font-size:0.82rem;color:var(--text2);margin-bottom:18px;">${st.name}</div>
             <div style="display:flex;gap:8px;">
-              <button class="btn btn-green btn-full" onclick="sessionContinue()">&#x25b6; Devam Et</button>
-              <button class="btn btn-red btn-full" onclick="sessionNew()">&#x2795; Yeni Turnuva</button>
+              <button class="btn btn-green btn-full" onclick="sessionContinue()">&#x25b6; Continue</button>
+              <button class="btn btn-red btn-full" onclick="sessionNew()">&#x2795; New Tournament</button>
             </div>
           </div>
         </div>`;
@@ -563,7 +630,7 @@ window.doLogin=function(){
 };
 window.sessionContinue=function(){renderAdminPanel();};
 window.sessionNew=function(){
-  if(!confirm('Mevcut turnuva silinecek. Emin misiniz?'))return;
+  if(!confirm('This will delete the current tournament. Are you sure?'))return;
   ['state','pairs','boards','movements','logs','approvals'].forEach(k=>DB.del(k));
   localStorage.removeItem('bm_adminSessionSnap');
   renderAdminPanel();
@@ -574,7 +641,7 @@ window.doLogout=function(){
     if(st&&st.status==='running'){
       // Save snapshot for session restore
       localStorage.setItem('bm_adminSessionSnap','1');
-      if(!confirm('Admin sayfasindan cikiyorsunuz.\n\nYedek almak ister misiniz?\n(Iptal: Yedek al, Tamam: Devam)')){
+      if(!confirm('Admin sayfasindan cikiyorsunuz.\n\nWould you like to export a backup?\n(Cancel: Export, OK: Continue)')){
         adminExport();
       }
     }
@@ -588,7 +655,7 @@ function refreshTopbar(){
   const s=getState();const el=document.getElementById('topbarRound');
   if(s.currentRound>0){
     el.style.display='inline-flex';
-    el.textContent='Tur '+s.currentRound+'/'+s.roundCount+(s.name?' · '+s.name:'');
+    el.textContent='Round '+s.currentRound+'/'+s.roundCount+(s.name?' · '+s.name:'');
   } else el.style.display='none';
 }
 
@@ -702,7 +769,7 @@ function renderTableDetail(tableNo){
     boardsHTML=`<div class="board-item pending">
       <span class="bi-num">Board ${approvalPending.boardNo}</span>
       <span class="bi-contract">${ap.contract||'—'}</span>
-      <span style="font-size:0.72rem;color:var(--gold);">⏳ Onay bekleniyor</span>
+      <span style="font-size:0.72rem;color:var(--gold);">⏳ Awaiting approval</span>
       ${bmSide!==ap.side
         ?`<button class="btn btn-green btn-sm" onclick="bmApproveScore('${apk}')">✅ OK</button>`
         :`<button class="btn btn-red btn-sm" onclick="bmCancelApproval('${apk}')">✕</button>`}
@@ -710,7 +777,7 @@ function renderTableDetail(tableNo){
   } else if(nextBoard){
     boardsHTML=`<div class="board-item pending" style="border-color:var(--gold);cursor:pointer;" onclick="bmEnterBoard(${nextBoard.boardNo})">
       <span class="bi-num" style="color:var(--gold);font-size:1rem;">Board ${nextBoard.boardNo}</span>
-      <span class="bi-contract" style="color:var(--text2);font-size:0.8rem;">${totalBoards} boarddan ${doneCount+1}. sıra</span>
+      <span class="bi-contract" style="color:var(--text2);font-size:0.8rem;">${totalBoards} of ${doneCount+1}. (next)</span>
       <span style="font-size:0.78rem;color:var(--text3);"></span>
       <button class="btn btn-gold btn-sm" onclick="event.stopPropagation();bmEnterBoard(${nextBoard.boardNo})">Enter ↵</button>
     </div>`;
@@ -744,7 +811,7 @@ function renderTableDetail(tableNo){
       </div>
       <div id="boardsSection">
         <div class="card">
-          <div class="card-title"><span>🃏</span> ${allDone?'Tum Boardlar Tamamlandi ✓':nextBoard?'Siradaki Board: '+nextBoard.boardNo:approvalPending?'Onay Bekleniyor...':'Hazir'}</div>
+          <div class="card-title"><span>🃏</span> ${allDone?'All Boards Complete ✓':nextBoard?'Next Board: '+nextBoard.boardNo:approvalPending?'Awaiting Approval...':'Hazir'}</div>
           <div id="boardsList">${boardsHTML}</div>
           ${isPhantom?`<div style="margin-top:8px;text-align:center;font-size:0.8rem;color:var(--purple);">👻 Phantom pair — sit out</div>`:''}
         </div>
@@ -1174,12 +1241,12 @@ function renderApprovalWaiting(boardNo,boardData,key){
 
   function buildOtherHTML(){
     const others=getOtherTablesSameBoard(boardNo,bmTableNo,s.currentRound);
-    if(!others.length)return '<div style="font-size:0.75rem;color:var(--text3);margin-top:8px;text-align:center;">Diger masalar henuz oynamadi</div>';
-    let h='<div style="margin-top:10px;"><div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Ayni board — Diger masalar</div>';
+    if(!others.length)return '<div style="font-size:0.75rem;color:var(--text3);margin-top:8px;text-align:center;">Other tables haven't played yet</div>';
+    let h='<div style="margin-top:10px;"><div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Same board — Other tables</div>';
     others.forEach(function(o){
       const sc=o.nsScore>0?'var(--green)':o.nsScore<0?'var(--red)':'var(--gold)';
       h+='<div style="display:flex;justify-content:space-between;align-items:center;background:var(--surface2);border-radius:6px;padding:6px 10px;margin-bottom:4px;font-size:0.78rem;">'
-        +'<span style="color:var(--text3);">Masa '+o.table+'</span>'
+        +'<span style="color:var(--text3);">Table '+o.table+'</span>'
         +'<span style="font-family:\'Share Tech Mono\',monospace;">'+o.contract+'</span>'
         +'<span style="font-weight:700;color:'+sc+';">'+(o.nsScore>0?'+':'')+o.nsScore+'</span>'
         +'</div>';
@@ -1190,20 +1257,20 @@ function renderApprovalWaiting(boardNo,boardData,key){
   document.getElementById('panelContent').innerHTML=`
     <div class="bm-device" style="max-width:360px;">
       <div class="bm-lcd">
-        <div class="bm-lcd-row inv">BOARD ${String(boardNo).padStart(2,' ')} ONAY BEKLENIYOR</div>
+        <div class="bm-lcd-row inv">BOARD ${String(boardNo).padStart(2,' ')} AWAITING APPROVAL</div>
         <div class="bm-lcd-row">CONTR:${(boardData.contract||'PASS').padEnd(14)}</div>
-        <div class="bm-lcd-row">NS SKOR: ${String(scoreStr).padEnd(11)}</div>
-        <div class="bm-lcd-row blink">RAKIP ONAYLASIN...  </div>
+        <div class="bm-lcd-row">NS SCORE: ${String(scoreStr).padEnd(11)}</div>
+        <div class="bm-lcd-row blink">OPPONENT CONFIRM... </div>
       </div>
       <div class="approval-screen">
-        <div class="approval-title">⏳ Rakip onayı bekleniyor</div>
+        <div class="approval-title">⏳ Waiting for opponent to confirm</div>
         <div class="approval-contract">${boardData.contract||'PASS'}</div>
         <div class="approval-score" style="color:${scoreColor};">NS: ${scoreStr}</div>
-        <div class="approval-waiting">Rakip cihazda OK basması bekleniyor...</div>
+        <div class="approval-waiting">Waiting for opponent device to confirm...</div>
         <div id="otherTablesDiv">${otherTablesHTML}</div>
         <div style="display:flex;gap:8px;margin-top:10px;">
-          <button class="btn btn-ghost btn-full" onclick="bmCancelApproval('${key}');renderTableDetail(${bmTableNo});">✕ İptal</button>
-          <button class="btn btn-green btn-full" onclick="bmSelfApprove('${key}',${bmTableNo})">✅ İkisi de Onayladı</button>
+          <button class="btn btn-ghost btn-full" onclick="bmCancelApproval('${key}');renderTableDetail(${bmTableNo});">✕ Cancel</button>
+          <button class="btn btn-green btn-full" onclick="bmSelfApprove('${key}',${bmTableNo})">✅ Both Agreed</button>
         </div>
       </div>
     </div>`;
@@ -1225,7 +1292,7 @@ function renderApprovalWaiting(boardNo,boardData,key){
         delete aps[key];setApprovals(aps);
       }
       addLog('ok','Board '+boardNo+' onaylandi',boardData.contract||'PASS');
-      toast('✅ Onaylandi! Siradaki board.');
+      toast('✅ Approved! Next board.');
       renderTableDetail(bmTableNo);
     }
   },1500);
@@ -1264,8 +1331,8 @@ function renderScreenPanel(){
       <div class="sb-header">
         <div class="sb-title">🏆 ${s.name}</div>
         <div style="display:flex;gap:6px;align-items:center;">
-          <span class="live-pill"><div class="live-dot"></div>Canli</span>
-          <button class="btn btn-blue btn-sm" onclick="screenPrintPDF()">🖨 PDF Çikti</button>
+          <span class="live-pill"><div class="live-dot"></div>Live</span>
+          <button class="btn btn-blue btn-sm" onclick="screenPrintPDF()">🖨 Print PDF</button>
         </div>
       </div>
       <div class="stats-row">
@@ -1289,7 +1356,7 @@ function renderScreenPanel(){
 window.screenPrintPDF=function(){
   const s=getState();const boards=getBoards();const movements=getMovements();const pairs=getPairs();
   const keys=Object.keys(boards).filter(k=>boards[k].status==='done').sort();
-  if(!keys.length){toast('Henüz tamamlanan board yok');return;}
+  if(!keys.length){toast('No completed boards yet');return;}
   
   let rows='';
   keys.forEach(k=>{
@@ -1300,8 +1367,8 @@ window.screenPrintPDF=function(){
     const sc=typeof d.nsScore==='number'?((d.nsScore>0?'+':'')+d.nsScore):d.nsScore||'?';
     const rowBg=typeof d.nsScore==='number'?(d.nsScore>0?'#e8f5e9':d.nsScore<0?'#ffebee':'#fff8e1'):'#f5f5f5';
     rows+=`<tr style="background:${rowBg}">
-      <td style="font-weight:700;color:#1565c0;">Masa ${t}</td>
-      <td>Tur ${r}</td>
+      <td style="font-weight:700;color:#1565c0;">Table ${t}</td>
+      <td>Round ${r}</td>
       <td style="font-weight:700;">Board ${b}</td>
       <td style="color:#1565c0;">${ns.name}</td>
       <td style="color:#e65100;">${ew.name}</td>
@@ -1332,7 +1399,7 @@ window.screenPrintPDF=function(){
 
   const win=window.open('','_blank');
   win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
-  <title>${s.name} — Turnuva Sonuclari</title>
+  <title>${s.name} — Tournament Results</title>
   <style>
     body{font-family:Arial,sans-serif;font-size:11px;margin:16px;color:#222;}
     h1{font-size:18px;margin-bottom:4px;color:#1a237e;}
@@ -1345,11 +1412,11 @@ window.screenPrintPDF=function(){
   </style>
   </head><body>
   <h1>♠ ${s.name}</h1>
-  <div class="meta">${s.tableCount} masa · ${s.roundCount} tur · ${s.boardsPerRound} board/tur · ${s.scoring||'MP'} · ${s.movement||''} · Yazdirilma: ${new Date().toLocaleString('tr-TR')}</div>
-  <h2>🏆 Genel Sıralama</h2>
-  <table><thead><tr><th>#</th><th>Oyuncu</th><th>Yön</th><th>MP</th><th>%</th></tr></thead><tbody>${rankRows}</tbody></table>
-  <h2>📊 Tüm Tamamlanan Board Sonuclari</h2>
-  <table><thead><tr><th>Masa</th><th>Tur</th><th>Board</th><th>NS Cifti</th><th>EW Cifti</th><th>Kontrat</th><th>İlk Hamle</th><th>NS Puan</th></tr></thead><tbody>${rows}</tbody></table>
+  <div class="meta">${s.tableCount} tables · ${s.roundCount} rounds · ${s.boardsPerRound} board/rounds · ${s.scoring||'MP'} · ${s.movement||''} · Printed: ${new Date().toLocaleString('tr-TR')}</div>
+  <h2>🏆 Overall Rankings</h2>
+  <table><thead><tr><th>#</th><th>Player</th><th>Dir</th><th>MP</th><th>%</th></tr></thead><tbody>${rankRows}</tbody></table>
+  <h2>📊 All Completed Board Results</h2>
+  <table><thead><tr><th>Masa</th><th>Tur</th><th>Board</th><th>NS Pair</th><th>EW Pair</th><th>Contract</th><th>Opening Lead</th><th>NS Score</th></tr></thead><tbody>${rows}</tbody></table>
   <script>window.onload=function(){window.print();}<\/script>
   </body></html>`);
   win.document.close();
@@ -1427,11 +1494,12 @@ function renderAdminPanel(){
         <button class="admin-tab" onclick="setAdminTab('boards',this)">📊 Boards</button>
         <button class="admin-tab" onclick="setAdminTab('history',this)">📜 History</button>
         <button class="admin-tab" onclick="setAdminTab('log',this)">📋 Log</button>
+        <button class="admin-tab" onclick="setAdminTab('security',this)">🔒 Security</button>
       </div>
       <div id="adminContent"></div>
     </div>`;
   const tabs=document.querySelectorAll('.admin-tab');
-  const idx=['setup','players','movement','tables','boards','history','log'].indexOf(adminTab);
+  const idx=['setup','players','movement','tables','boards','history','log','security'].indexOf(adminTab);
   if(tabs[idx])tabs[idx].classList.add('active');
   renderAdminTab();
 }
@@ -1443,7 +1511,7 @@ window.setAdminTab=function(tab,btn){
 };
 function renderAdminTab(){
   const c=document.getElementById('adminContent');if(!c)return;
-  const m={setup:renderSetup,players:renderPlayersAdmin,movement:renderMovement,tables:renderTables,boards:renderBoards,history:renderHistory,log:renderLog};
+  const m={setup:renderSetup,players:renderPlayersAdmin,movement:renderMovement,tables:renderTables,boards:renderBoards,history:renderHistory,log:renderLog,security:renderSecurity};
   c.innerHTML=(m[adminTab]||renderSetup)();
 }
 
@@ -1457,7 +1525,7 @@ function renderSetup(){
   return`
   <div class="card">
     <div class="card-title"><span>⚙️</span> Tournament Setup</div>
-    <div class="field"><label>Turnuva Kimliği (otomatik)</label><input id="aName" value="${s.name||''}" readonly style="cursor:default;color:var(--text3);font-size:0.82rem;" placeholder="Turnuva başlatıldığında otomatik atanır"></div>
+    <div class="field"><label>Tournament ID (auto)</label><input id="aName" value="${s.name||''}" readonly style="cursor:default;color:var(--text3);font-size:0.82rem;" placeholder="Assigned automatically when tournament is created"></div>
     <div class="field-row">
       <div class="field">
         <label>Number of Players</label>
@@ -1558,7 +1626,7 @@ window.adminSetup=function(){
   s.movement=mov;s.scoring=scoring;s._setupPlayers=players;
   setState(s);
   addLog('ok','Tournament created',`${players} players, ${tables} tables, ${result.rounds} rounds, ${mov}, ${scoring}`);
-  toast('✅ Tournament created! Enter player names in Players tab.');
+  toast('✅ Tournament created! Enter player names in the Players tab.');
   adminTab='players';
   refreshTopbar();renderAdminPanel();
 };
@@ -1637,7 +1705,7 @@ function renderPlayersAdmin(){
     <div class="player-name-input">
       <span class="player-num">${k.replace('ns_','N').replace('ew_','E').replace('p','P')}</span>
       <input value="${p.name}" onchange="updatePairName('${k}',this.value)"
-        placeholder="Ad Soyad"
+        placeholder="Full Name"
         style="flex:1;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem;outline:none;font-family:inherit;">
     </div>`;};
 
@@ -1660,15 +1728,15 @@ function renderPlayersAdmin(){
       <button class="btn btn-gold btn-full" onclick="adminBulkNames()">Load Names</button>
     </div>
     <div class="card">
-      <div class="card-title"><span>📂</span> Board Dosyası Yükle</div>
-      <p style="font-size:0.8rem;color:var(--text2);margin-bottom:8px;">Daha önce kaydedilmiş JSON dosyasını yükleyin ya da devam edin.</p>
+      <div class="card-title"><span>📂</span> Load Board File</div>
+      <p style="font-size:0.8rem;color:var(--text2);margin-bottom:8px;">Load a previously saved JSON file or continue without one.</p>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
-        <button class="btn btn-gold btn-sm" onclick="document.getElementById('boardFile').click()">📄 JSON Yükle</button>
-        <button class="btn btn-blue btn-sm" onclick="adminImportHandsOpen()">🃏 PBN/LIN El Yükle</button>
-        <button class="btn btn-ghost btn-sm" onclick="toast('El yüklenmeden devam ediliyor...')">▶ Yükleme, Devam Et</button>
+        <button class="btn btn-gold btn-sm" onclick="document.getElementById('boardFile').click()">📄 Load JSON</button>
+        <button class="btn btn-blue btn-sm" onclick="adminImportHandsOpen()">🃏 PBN/LIN Load Hands</button>
+        <button class="btn btn-ghost btn-sm" onclick="toast('Continuing without hand file...')">▶ Skip, Continue</button>
       </div>
       <div class="import-drop" onclick="document.getElementById('boardFile').click()">
-        <div style="font-size:2rem;">📂</div><div style="font-weight:600;">boards.json Sürükle / Seç</div>
+        <div style="font-size:2rem;">📂</div><div style="font-weight:600;">Drag / Select boards.json</div>
         <input type="file" id="boardFile" accept=".json" onchange="adminLoadBoardsFile(this)" style="display:none;">
       </div>
     </div>`;
@@ -1723,21 +1791,21 @@ window.adminLoadBoardsFile=function(inp){
   };r.readAsText(f);
 };
 window.adminImportHandsOpen=function(){
-  openModal('PBN / LIN El Dosyası Yükle',`
-    <p style="font-size:0.82rem;color:var(--text2);margin-bottom:8px;">.pbn veya .lin formatında el dosyası yükleyin. El bilgileri ileri aşamada referans için saklanır.</p>
+  openModal('Load PBN / LIN Hand File',`
+    <p style="font-size:0.82rem;color:var(--text2);margin-bottom:8px;">Upload a hand file in .pbn or .lin format. Hand data is stored for reference.</p>
     <div style="background:var(--surface2);border-radius:6px;padding:10px;margin-bottom:10px;font-size:0.75rem;color:var(--text2);">
-      <b>Desteklenen formatlar:</b><br>
+      <b>Supported formats:</b><br>
       • <b>PBN</b>: [Board "1"] [Deal "N:..."] formatı<br>
       • <b>LIN</b>: BBO LIN formatı (pn|...|md|...)<br>
-      • <b>CSV</b>: Board,North,East,South,West satırları
+      • <b>CSV</b>: Board,North,East,South,West rows
     </div>
     <div class="import-drop" onclick="document.getElementById('handsFile').click()">
-      <div style="font-size:2rem;">🃏</div><div style="font-weight:600;">.pbn / .lin / .txt Seç</div>
+      <div style="font-size:2rem;">🃏</div><div style="font-weight:600;">Select .pbn / .lin / .txt</div>
       <input type="file" id="handsFile" accept=".pbn,.lin,.txt,.csv" onchange="adminLoadHandsFile(this)" style="display:none;">
     </div>
-    <div class="field"><label>Veya dosya içeriğini yapıştırın:</label><textarea id="handsText" rows="5" placeholder="[Board &quot;1&quot;]&#10;[Deal &quot;N:AKQ.23.456.789 ...&quot;]&#10;..."></textarea></div>`,
-    `<button class="btn btn-ghost" onclick="closeModal()">Vazgeç</button>
-     <button class="btn btn-gold" onclick="adminParseHandsText()">Yükle</button>`);
+    <div class="field"><label>Or paste file contents:</label><textarea id="handsText" rows="5" placeholder="[Board &quot;1&quot;]&#10;[Deal &quot;N:AKQ.23.456.789 ...&quot;]&#10;..."></textarea></div>`,
+    `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+     <button class="btn btn-gold" onclick="adminParseHandsText()">Load</button>`);
 };
 window.adminLoadHandsFile=function(inp){
   const f=inp.files[0];if(!f)return;
@@ -1747,13 +1815,13 @@ window.adminLoadHandsFile=function(inp){
 };
 window.adminParseHandsText=function(){
   const raw=(document.getElementById('handsText').value||'').trim();
-  if(!raw){toast('❌ Dosya boş');return;}
+  if(!raw){toast('❌ File is empty');return;}
   const hands=parsePBNorLIN(raw);
-  if(!hands.length){toast('❌ Format tanınamadı');return;}
+  if(!hands.length){toast('❌ Format not recognised');return;}
   // Store as bm_hands
   localStorage.setItem('bm_hands',JSON.stringify(hands));
-  addLog('ok','El dosyası yüklendi',hands.length+' board el bilgisi');
-  toast('✅ '+hands.length+' el yüklendi!');
+  addLog('ok','Hand file loaded',hands.length+' board hand records');
+  toast('✅ '+hands.length+' hands loaded!');
   closeModal();renderAdminTab();
 };
 function parsePBNorLIN(raw){
@@ -2036,10 +2104,10 @@ window.viewArchive=function(i){
     </tr>`;
   }).join('');
   openModal(`${a.state.name} — Sonuçlar`,
-    `<div style="font-size:0.75rem;color:var(--text3);margin-bottom:8px;">${rows.length} çift · ${bkeys.length} board tamamlandı</div>
-    <div style="font-weight:600;color:var(--gold);font-size:0.78rem;margin-bottom:6px;">Sıralama</div>
-    <table class="mv-table"><thead><tr><th>#</th><th>Ad Soyad</th><th>Yön</th><th>MP</th><th>%</th></tr></thead><tbody>${rowsHTML}</tbody></table>
-    ${boardRowsHTML?'<div style="font-weight:600;color:var(--gold);font-size:0.78rem;margin:10px 0 6px;">Board Sonuçları</div><table class="mv-table"><thead><tr><th>Masa/T/B</th><th>NS</th><th>EW</th><th>Kontrat</th><th>NS Puan</th></tr></thead><tbody>'+boardRowsHTML+'</tbody></table>':''}`,
+    `<div style="font-size:0.75rem;color:var(--text3);margin-bottom:8px;">${rows.length} pairs · ${bkeys.length} boards completed</div>
+    <div style="font-weight:600;color:var(--gold);font-size:0.78rem;margin-bottom:6px;">Rankings</div>
+    <table class="mv-table"><thead><tr><th>#</th><th>Full Name</th><th>Dir</th><th>MP</th><th>%</th></tr></thead><tbody>${rowsHTML}</tbody></table>
+    ${boardRowsHTML?'<div style="font-weight:600;color:var(--gold);font-size:0.78rem;margin:10px 0 6px;">Board Results</div><table class="mv-table"><thead><tr><th>Table/R/B</th><th>NS</th><th>EW</th><th>Contract</th><th>NS Score</th></tr></thead><tbody>'+boardRowsHTML+'</tbody></table>':''}`,
     `<button class="btn btn-ghost" onclick="closeModal()">Kapat</button>
      <button class="btn btn-blue btn-sm" onclick="archivePDF(${i})">PDF Çikti</button>`);
 };
@@ -2070,15 +2138,15 @@ window.archivePDF=function(i){
   });
   const st=a.state||{};
   const win=window.open('','_blank');
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${st.name} Sonuclari</title>
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>${st.name} Results</title>
   <style>body{font-family:Arial,sans-serif;font-size:11px;margin:16px;color:#222;}h1{font-size:17px;color:#1a237e;margin-bottom:3px;}h2{font-size:12px;color:#1a237e;border-bottom:1px solid #1a237e;padding-bottom:2px;margin:14px 0 5px;}.meta{font-size:10px;color:#666;margin-bottom:12px;}table{width:100%;border-collapse:collapse;margin-bottom:10px;}th{background:#1a237e;color:#fff;padding:4px 7px;text-align:left;font-size:9px;text-transform:uppercase;}td{padding:4px 7px;border-bottom:1px solid #e0e0e0;}</style>
   </head><body>
-  <h1>♠ ${st.name||'Turnuva'}</h1>
-  <div class="meta">${st.tableCount||'?'} masa · ${st.roundCount||'?'} tur · ${st.scoring||'MP'} · Bitis: ${a.finished?new Date(a.finished).toLocaleString('tr-TR'):''}</div>
-  <h2>Genel Sıralama</h2>
-  <table><thead><tr><th>#</th><th>Ad Soyad</th><th>Yon</th><th>MP</th><th>%</th></tr></thead><tbody>${rankRows}</tbody></table>
-  <h2>Board Sonuclari (${bkeys.length} board)</h2>
-  <table><thead><tr><th>Masa/Tur/B</th><th>NS</th><th>EW</th><th>Kontrat</th><th>Ilk Hamle</th><th>NS Puan</th></tr></thead><tbody>${bRows}</tbody></table>
+  <h1>♠ ${st.name||'Tournament'}</h1>
+  <div class="meta">${st.tableCount||'?'} tables · ${st.roundCount||'?'} rounds · ${st.scoring||'MP'} · Finished: ${a.finished?new Date(a.finished).toLocaleString('tr-TR'):''}</div>
+  <h2>Overall Rankings</h2>
+  <table><thead><tr><th>#</th><th>Full Name</th><th>Dir</th><th>MP</th><th>%</th></tr></thead><tbody>${rankRows}</tbody></table>
+  <h2>Board Results (${bkeys.length} boards)</h2>
+  <table><thead><tr><th>Table/Round/B</th><th>NS</th><th>EW</th><th>Contract</th><th>Opening Lead</th><th>NS Score</th></tr></thead><tbody>${bRows}</tbody></table>
   <script>window.onload=function(){window.print();}<\/script>
   </body></html>`);
   win.document.close();
@@ -2102,6 +2170,60 @@ function calcMPFromData(boards,movements){
   });
   return pairMP;
 }
+
+
+// ── Security ──
+function renderSecurity(){
+  return`
+  <div class="card">
+    <div class="card-title"><span>🔒</span> Change Passwords</div>
+    <p style="font-size:0.82rem;color:var(--text2);margin-bottom:14px;">Passwords are stored in Firebase and apply to all devices immediately.</p>
+
+    <div style="font-weight:600;color:var(--gold);font-size:0.82rem;margin-bottom:8px;">Admin Password</div>
+    <div class="field"><label>Current Admin Password</label><input type="password" id="secAdminOld" placeholder="Current password"></div>
+    <div class="field"><label>New Admin Password</label><input type="password" id="secAdminNew" placeholder="New password (min 4 chars)"></div>
+    <div class="field"><label>Confirm New Password</label><input type="password" id="secAdminNew2" placeholder="Repeat new password"></div>
+    <button class="btn btn-gold" style="width:100%;margin-bottom:18px;" onclick="secChangeAdmin()">💾 Save Admin Password</button>
+
+    <div style="font-weight:600;color:var(--blue);font-size:0.82rem;margin-bottom:8px;">Table Password</div>
+    <div class="field"><label>Current Admin Password (to authorise)</label><input type="password" id="secTableAuth" placeholder="Admin password"></div>
+    <div class="field"><label>New Table Password</label><input type="password" id="secTableNew" placeholder="New table password (min 4 chars)"></div>
+    <div class="field"><label>Confirm New Password</label><input type="password" id="secTableNew2" placeholder="Repeat new password"></div>
+    <button class="btn btn-blue" style="width:100%;" onclick="secChangeTable()">💾 Save Table Password</button>
+  </div>`;
+}
+
+window.secChangeAdmin=async function(){
+  const oldPw=document.getElementById('secAdminOld').value;
+  const newPw=document.getElementById('secAdminNew').value.trim();
+  const newPw2=document.getElementById('secAdminNew2').value.trim();
+  if(!oldPw||!newPw||!newPw2){toast('❌ Fill all fields');return;}
+  if(newPw.length<4){toast('❌ Min 4 characters');return;}
+  if(newPw!==newPw2){toast('❌ Passwords do not match');return;}
+  const PASS=await loadPasswords();
+  if(oldPw!==PASS.admin){toast('❌ Current password incorrect');return;}
+  try{
+    await savePasswords(newPw, PASS.table);
+    toast('✅ Admin password updated');
+    ['secAdminOld','secAdminNew','secAdminNew2'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  }catch(e){toast('❌ Firebase error: '+e.message);}
+};
+
+window.secChangeTable=async function(){
+  const auth=document.getElementById('secTableAuth').value;
+  const newPw=document.getElementById('secTableNew').value.trim();
+  const newPw2=document.getElementById('secTableNew2').value.trim();
+  if(!auth||!newPw||!newPw2){toast('❌ Fill all fields');return;}
+  if(newPw.length<4){toast('❌ Min 4 characters');return;}
+  if(newPw!==newPw2){toast('❌ Passwords do not match');return;}
+  const PASS=await loadPasswords();
+  if(auth!==PASS.admin){toast('❌ Admin password incorrect');return;}
+  try{
+    await savePasswords(PASS.admin, newPw);
+    toast('✅ Table password updated');
+    ['secTableAuth','secTableNew','secTableNew2'].forEach(id=>{const el=document.getElementById(id);if(el)el.value='';});
+  }catch(e){toast('❌ Firebase error: '+e.message);}
+};
 
 // ── Log ──
 function renderLog(){
