@@ -988,25 +988,24 @@ window.bmShowRoundOver=function(tableNo){
           <div class="ro-move-label">📋 Next Round ${nextR} — Boards</div>
           <div class="ro-move-boards">B${nextM.boardStart||'?'} – B${nextM.boardEnd||'?'}</div>
         </div>
-        <button class="btn btn-gold btn-full" onclick="bmShowWaiting(${tableNo})">OK — Show Waiting Screen →</button>
+        <button class="btn btn-gold btn-full" onclick="bmShowWaiting(${tableNo},${nextR})">OK — Show Waiting Screen →</button>
       </div>
     </div>`;
 };
 
-window.bmShowWaiting=function(tableNo){
-  const s=getState();
-  const nextR=s.currentRound+1;
+window.bmShowWaiting=function(tableNo,nextR){
+  // nextR is passed explicitly — never computed from currentRound (which may already have advanced)
   const movements=getMovements();const pairs=getPairs();
   const nextM=movements[nextR+'_'+tableNo]||{};
-  const nextNS=pairs[nextM.ns]||{name:nextM.ns||'—',isPhantom:false};
-  const nextEW=pairs[nextM.ew]||{name:nextM.ew||'—',isPhantom:false};
+  const nextNS=pairs[nextM.ns]||{name:'—',isPhantom:false};
+  const nextEW=pairs[nextM.ew]||{name:'—',isPhantom:false};
 
   document.getElementById('panelContent').innerHTML=`
     <div class="bm-device" style="max-width:360px;">
       <div class="bm-lcd">
         <div class="bm-lcd-row inv">Table ${String(tableNo).padStart(2,' ')}  ·  Round ${String(nextR).padStart(2,' ')}</div>
         <div class="bm-lcd-row">Waiting for Players</div>
-        <div class="bm-lcd-row blink">🔵 ${(nextNS.name||'').slice(0,10)}  🟡 ${(nextEW.name||'').slice(0,10)}</div>
+        <div class="bm-lcd-row blink">🔵 ${(nextNS.name||'').slice(0,12)}  🟡 ${(nextEW.name||'').slice(0,12)}</div>
         <div class="bm-lcd-row">Boards ${nextM.boardStart||'?'} – ${nextM.boardEnd||'?'}</div>
       </div>
       <div class="waiting-screen">
@@ -1056,7 +1055,6 @@ window.bmStartNewRound=function(tableNo,roundNo){
   const s=getState();
   if(s.currentRound<roundNo){
     toast('⏳ Direktor Round '+roundNo+' yi henüz başlatmadı. Lütfen bekleyin...');
-    // Auto-check every 3 seconds
     if(bmPollInterval)clearInterval(bmPollInterval);
     bmPollInterval=setInterval(()=>{
       const s2=getState();
