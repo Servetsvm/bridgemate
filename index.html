@@ -516,10 +516,10 @@ function getNextRoundInfo(tableNo,currentRound,state,movements,pairs){
 // ══════════════════════════════════════════════════════
 const FIREBASE_CONFIG = {
   apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT.firebaseapp.com",
-  databaseURL: "https://YOUR_PROJECT-default-rtdb.firebaseio.com",
-  projectId: "YOUR_PROJECT",
-  storageBucket: "YOUR_PROJECT.appspot.com",
+  authDomain: "bridgemate-77c72.firebaseapp.com",
+  databaseURL: "https://bridgemate-77c72-default-rtdb.europe-west1.firebasedatabase.app",
+  projectId: "bridgemate-77c72",
+  storageBucket: "bridgemate-77c72.appspot.com",
   messagingSenderId: "YOUR_SENDER_ID",
   appId: "YOUR_APP_ID"
 };
@@ -547,20 +547,16 @@ let _cachedPass = null;
 // Load passwords from Firebase (falls back to defaults)
 async function loadPasswords(){
   if(_cachedPass) return _cachedPass;
-  // Skip Firebase fetch if config is not yet filled in
-  const dbURL = FIREBASE_CONFIG.databaseURL;
-  if(dbURL && !dbURL.includes('YOUR_PROJECT')){
-    try{
-      const res = await fetch(dbURL + '/config/passwords.json');
-      if(res.ok){
-        const data = await res.json();
-        if(data && data.admin && data.table){
-          _cachedPass = data;
-          return _cachedPass;
-        }
+  try{
+    const res = await fetch(FIREBASE_CONFIG.databaseURL + '/config/passwords.json', {cache:'no-store'});
+    if(res.ok){
+      const data = await res.json();
+      if(data && data.admin && data.table){
+        _cachedPass = data;
+        return _cachedPass;
       }
-    } catch(e){ console.warn('Firebase password fetch failed, using defaults'); }
-  }
+    }
+  } catch(e){ console.warn('Firebase password fetch failed, using defaults'); }
   _cachedPass = {...DEFAULT_PASS};
   return _cachedPass;
 }
