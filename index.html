@@ -547,16 +547,20 @@ let _cachedPass = null;
 // Load passwords from Firebase (falls back to defaults)
 async function loadPasswords(){
   if(_cachedPass) return _cachedPass;
-  try{
-    const res = await fetch(FIREBASE_CONFIG.databaseURL + '/config/passwords.json');
-    if(res.ok){
-      const data = await res.json();
-      if(data && data.admin && data.table){
-        _cachedPass = data;
-        return _cachedPass;
+  // Skip Firebase fetch if config is not yet filled in
+  const dbURL = FIREBASE_CONFIG.databaseURL;
+  if(dbURL && !dbURL.includes('YOUR_PROJECT')){
+    try{
+      const res = await fetch(dbURL + '/config/passwords.json');
+      if(res.ok){
+        const data = await res.json();
+        if(data && data.admin && data.table){
+          _cachedPass = data;
+          return _cachedPass;
+        }
       }
-    }
-  } catch(e){ console.warn('Firebase password fetch failed, using defaults'); }
+    } catch(e){ console.warn('Firebase password fetch failed, using defaults'); }
+  }
   _cachedPass = {...DEFAULT_PASS};
   return _cachedPass;
 }
@@ -591,6 +595,14 @@ selRole('admin');
 window.doLogin=async function(){
   const err=document.getElementById('loginErr');err.textContent='';
   const pw=document.getElementById('pwInput').value;
+  // Screen role has no password
+  if(role==='screen'){
+    document.getElementById('loginScreen').style.display='none';
+    document.getElementById('app').style.display='flex';
+    document.getElementById('topbarRole').textContent='Screen';
+    refreshTopbar();renderPanel();
+    return;
+  }
   const loginBtn=document.querySelector('.btn-primary');
   if(loginBtn){loginBtn.disabled=true;loginBtn.textContent='Checking...';}
   let PASS;
