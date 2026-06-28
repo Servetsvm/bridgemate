@@ -644,6 +644,7 @@ window.sessionNew=function(){
   renderAdminPanel();
 };
 window.doLogout=function(){
+  if(role==='table')unlockAllMyTables();
   if(role==='admin'){
     const st=DB.get('state');
     if(st&&st.status==='running'){
@@ -694,8 +695,33 @@ window.renderPanel=function(){
 };
 
 // ══════════════════════════════════════════════════════
-//  TABLE PANEL — BridgeMate style
+//  TABLE LOCK SYSTEM — Soft warning only
+//  tableLocks: { "round_tableNo": { lockedAt } }
 // ══════════════════════════════════════════════════════
+const getTableLocks=()=>DB.get('tableLocks')||{};
+const setTableLocks=l=>DB.set('tableLocks',l);
+
+function tableLockKey(tableNo){
+  return getState().currentRound+'_'+tableNo;
+}
+function lockTable(tableNo){
+  const locks=getTableLocks();
+  locks[tableLockKey(tableNo)]={lockedAt:Date.now(),tableNo};
+  setTableLocks(locks);
+}
+function unlockTable(tableNo){
+  const locks=getTableLocks();
+  delete locks[tableLockKey(tableNo)];
+  setTableLocks(locks);
+}
+function unlockAllMyTables(){
+  // No device ID — just clear any lock this session placed
+  if(bmTableNo)unlockTable(bmTableNo);
+}
+function isTableLocked(tableNo){
+  const locks=getTableLocks();
+  return!!locks[tableLockKey(tableNo)];
+}
 let bmTableNo=null;
 let bmSide='ns'; // 'ns' or 'ew' — which side is this device
 let boardForm={level:null,suit:null,declarer:null,result:0,doubled:'',leadSuit:'',leadRank:'',isPass:false};
@@ -703,6 +729,8 @@ let bmPollInterval=null;
 let bmTableState='select'; // 'select'|'confirm'|'play'|'approve'|'round_over'|'waiting'|'new_players'
 
 function renderTablePanel(){
+  // Release lock on current table if any
+  if(bmTableNo)unlockTable(bmTableNo);
   bmTableNo=null;bmTableState='select';
   if(bmPollInterval){clearInterval(bmPollInterval);bmPollInterval=null;}
   const s=getState();
@@ -734,9 +762,14 @@ window.bmSetSide=function(side){bmSide=side;};
 window.bmSelectTable=function(){
   const s=getState();
   const n=parseInt(document.getElementById('tableInput')?.value||'');
-  if(isNaN(n)||n<1||n>s.tableCount){toast('❌ Enter a valid table number (1-'+s.tableCount+')');return;}
+  if(isNaN(n)||n<1||n>s.tableCount){toast('❌ Geçerli bir masa numarası girin (1-'+s.tableCount+')');return;}
+  if(isTableLocked(n)){
+    // Soft warning — ask for confirmation
+    if(!confirm(`⚠️ Masa ${n} zaten başka bir cihazda açık görünüyor.\n\nYine de bu masaya girmek istiyor musunuz?`))return;
+  }
+  lockTable(n);
   bmTableNo=n;
-  renderTableDetail(n);
+  bmShowNewPlayers(n, s.currentRound);
 };
 
 function renderTableDetail(tableNo){
@@ -791,6 +824,7 @@ function renderTableDetail(tableNo){
   const boardsHTMLunused='';
 
   const allDone=doneCount===totalBoards&&totalBoards>0;
+  if(allDone)unlockTable(tableNo); // Kilit kaldır — masa tamamlandı
   let actionHTML='';
   if(allDone){
     if(s.currentRound<s.roundCount){
@@ -988,25 +1022,24 @@ window.bmShowRoundOver=function(tableNo){
           <div class="ro-move-label">📋 Next Round ${nextR} — Boards</div>
           <div class="ro-move-boards">B${nextM.boardStart||'?'} – B${nextM.boardEnd||'?'}</div>
         </div>
-        <button class="btn btn-gold btn-full" onclick="bmShowWaiting(${tableNo})">OK — Show Waiting Screen →</button>
+        <button class="btn btn-gold btn-full" onclick="bmShowWaiting(${tableNo},${nextR})">OK — Show Waiting Screen →</button>
       </div>
     </div>`;
 };
 
-window.bmShowWaiting=function(tableNo){
-  const s=getState();
-  const nextR=s.currentRound+1;
+window.bmShowWaiting=function(tableNo,nextR){
+  // nextR is passed explicitly — never computed from currentRound (which may already have advanced)
   const movements=getMovements();const pairs=getPairs();
   const nextM=movements[nextR+'_'+tableNo]||{};
-  const nextNS=pairs[nextM.ns]||{name:nextM.ns||'—',isPhantom:false};
-  const nextEW=pairs[nextM.ew]||{name:nextM.ew||'—',isPhantom:false};
+  const nextNS=pairs[nextM.ns]||{name:'—',isPhantom:false};
+  const nextEW=pairs[nextM.ew]||{name:'—',isPhantom:false};
 
   document.getElementById('panelContent').innerHTML=`
     <div class="bm-device" style="max-width:360px;">
       <div class="bm-lcd">
         <div class="bm-lcd-row inv">Table ${String(tableNo).padStart(2,' ')}  ·  Round ${String(nextR).padStart(2,' ')}</div>
         <div class="bm-lcd-row">Waiting for Players</div>
-        <div class="bm-lcd-row blink">🔵 ${(nextNS.name||'').slice(0,10)}  🟡 ${(nextEW.name||'').slice(0,10)}</div>
+        <div class="bm-lcd-row blink">🔵 ${(nextNS.name||'').slice(0,12)}  🟡 ${(nextEW.name||'').slice(0,12)}</div>
         <div class="bm-lcd-row">Boards ${nextM.boardStart||'?'} – ${nextM.boardEnd||'?'}</div>
       </div>
       <div class="waiting-screen">
@@ -1021,42 +1054,76 @@ window.bmShowWaiting=function(tableNo){
 window.bmShowNewPlayers=function(tableNo,roundNo){
   const movements=getMovements();const pairs=getPairs();const s=getState();
   const m=movements[roundNo+'_'+tableNo]||{};
-  const nsPair=pairs[m.ns]||{name:'—',isPhantom:false};
-  const ewPair=pairs[m.ew]||{name:'—',isPhantom:false};
-  const nsNum=m.ns?m.ns.replace(/[^0-9]/g,''):'?';
-  const ewNum=m.ew?m.ew.replace(/[^0-9]/g,''):'?';
+  const nsPair=pairs[m.ns]||{name:'',isPhantom:false};
+  const ewPair=pairs[m.ew]||{name:'',isPhantom:false};
+  const [ns1,ns2]=splitPairName(nsPair.name);
+  const [ew1,ew2]=splitPairName(ewPair.name);
+  const hasNames=ns1||ns2||ew1||ew2;
 
+  // Determine if names already entered (from admin or previous entry)
+  // Show editable fields always so players can confirm/correct
   document.getElementById('panelContent').innerHTML=`
-    <div class="bm-device" style="max-width:360px;">
+    <div class="bm-device" style="max-width:380px;">
       <div class="new-players-screen">
         <div class="np-title">✅ Round ${roundNo} — Table ${tableNo}</div>
-        <div class="pair-confirm">
-          <div class="pair-box pair-box-ns">
-            <div class="pb-label">🔵 North-South</div>
-            <div class="pb-num">${nsNum}</div>
-            <div class="pb-name">${nsPair.name}</div>
-          </div>
-          <div class="pair-box pair-box-ew">
-            <div class="pb-label">🟡 East-West</div>
-            <div class="pb-num">${ewNum}</div>
-            <div class="pb-name">${ewPair.name}${ewPair.isPhantom?' 👻':''}</div>
+        <p style="font-size:0.78rem;color:var(--text2);text-align:center;margin-bottom:14px;">Lütfen isimlerinizi onaylayın veya girin</p>
+
+        <div style="background:var(--bluedim);border:1px solid rgba(91,155,213,0.25);border-radius:var(--radius-sm);padding:12px;margin-bottom:10px;">
+          <div style="font-size:0.68rem;font-weight:700;color:var(--blue);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">🔵 North-South</div>
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <input id="ns1inp" value="${ns1}" placeholder="1. Oyuncu — İsim Soyisim"
+              style="padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.88rem;outline:none;font-family:inherit;width:100%;">
+            <input id="ns2inp" value="${ns2}" placeholder="2. Oyuncu — İsim Soyisim"
+              style="padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.88rem;outline:none;font-family:inherit;width:100%;">
           </div>
         </div>
-        <div style="background:var(--surface2);border-radius:8px;padding:12px;margin-bottom:16px;">
-          <div style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Boards to play</div>
-          <div style="font-size:1.4rem;font-weight:700;font-family:'Share Tech Mono',monospace;color:var(--gold);">B${m.boardStart||'?'} – B${m.boardEnd||'?'}</div>
-          <div style="font-size:0.78rem;color:var(--text2);margin-top:3px;">${(m.boardEnd||3)-(m.boardStart||1)+1} boards this round</div>
+
+        <div style="background:var(--golddim);border:1px solid rgba(201,168,76,0.25);border-radius:var(--radius-sm);padding:12px;margin-bottom:14px;">
+          <div style="font-size:0.68rem;font-weight:700;color:var(--gold);letter-spacing:1px;text-transform:uppercase;margin-bottom:8px;">🟡 East-West</div>
+          <div style="display:flex;flex-direction:column;gap:6px;">
+            <input id="ew1inp" value="${ew1}" placeholder="1. Oyuncu — İsim Soyisim"
+              style="padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.88rem;outline:none;font-family:inherit;width:100%;">
+            <input id="ew2inp" value="${ew2}" placeholder="2. Oyuncu — İsim Soyisim"
+              style="padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.88rem;outline:none;font-family:inherit;width:100%;">
+          </div>
         </div>
-        <button class="btn btn-green btn-full" onclick="bmStartNewRound(${tableNo},${roundNo})">✅ OK — Start Playing</button>
+
+        <div style="background:var(--surface2);border-radius:8px;padding:10px 12px;margin-bottom:14px;text-align:center;">
+          <div style="font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:4px;">Boards to play</div>
+          <div style="font-size:1.3rem;font-weight:700;color:var(--gold);">B${m.boardStart||'?'} – B${m.boardEnd||'?'}</div>
+          <div style="font-size:0.75rem;color:var(--text2);margin-top:2px;">${(m.boardEnd||3)-(m.boardStart||1)+1} boards this round</div>
+        </div>
+
+        <button class="btn btn-green btn-full" onclick="bmConfirmPlayersAndStart(${tableNo},${roundNo},'${m.ns||''}','${m.ew||''}')">✅ Onayla — Oynamaya Başla</button>
       </div>
     </div>`;
+
+  // Focus first empty field
+  setTimeout(()=>{
+    const f=['ns1inp','ns2inp','ew1inp','ew2inp'].find(id=>!document.getElementById(id)?.value);
+    if(f)document.getElementById(f)?.focus();
+  },80);
+};
+
+window.bmConfirmPlayersAndStart=function(tableNo,roundNo,nsId,ewId){
+  const ns1=(document.getElementById('ns1inp')?.value||'').trim();
+  const ns2=(document.getElementById('ns2inp')?.value||'').trim();
+  const ew1=(document.getElementById('ew1inp')?.value||'').trim();
+  const ew2=(document.getElementById('ew2inp')?.value||'').trim();
+  const p=getPairs();
+  if(nsId&&p[nsId]){p[nsId].name=joinPairName(ns1,ns2);}
+  if(ewId&&p[ewId]){p[ewId].name=joinPairName(ew1,ew2);}
+  setPairs(p);
+  if(ns1||ns2||ew1||ew2)addLog('ok','Oyuncu isimleri girildi',`T${tableNo} R${roundNo}: ${joinPairName(ns1,ns2)} vs ${joinPairName(ew1,ew2)}`);
+  // Re-lock for the new round
+  lockTable(tableNo);
+  bmStartNewRound(tableNo,roundNo);
 };
 
 window.bmStartNewRound=function(tableNo,roundNo){
   const s=getState();
   if(s.currentRound<roundNo){
     toast('⏳ Direktor Round '+roundNo+' yi henüz başlatmadı. Lütfen bekleyin...');
-    // Auto-check every 3 seconds
     if(bmPollInterval)clearInterval(bmPollInterval);
     bmPollInterval=setInterval(()=>{
       const s2=getState();
@@ -1511,6 +1578,7 @@ function renderSbTab(allRows){
 function renderTablesTab(){
   const s=getState();if(!s.tableCount)return`<div class="empty-state"><div class="empty-icon">⚙️</div>Tournament not set up</div>`;
   const movements=getMovements();const pairs=getPairs();const boards=getBoards();
+  const locks=getTableLocks();
   let html='<div class="table-grid">';
   for(let t=1;t<=s.tableCount;t++){
     const m=movements[s.currentRound+'_'+t]||{};
@@ -1518,13 +1586,21 @@ function renderTablesTab(){
     let done=0,total=0;
     for(let b=m.boardStart||1;b<=(m.boardEnd||3);b++){total++;if(boards[t+'_'+s.currentRound+'_'+b]?.status==='done')done++;}
     const st=done===total&&total>0?'st-done':done>0?'st-wait':'st-empty';
+    const isLocked=!!locks[s.currentRound+'_'+t];
     html+=`<div class="table-card">
-      <div class="table-card-head"><span class="tcnum">Table ${t}</span><span class="tc-status ${st}">${done}/${total}</span></div>
+      <div class="table-card-head">
+        <span class="tcnum">Table ${t}</span>
+        <div style="display:flex;gap:4px;align-items:center;">
+          ${isLocked?'<span style="font-size:0.62rem;background:var(--greendim);color:var(--green);border:1px solid rgba(76,175,125,0.3);border-radius:8px;padding:1px 6px;">🔒 Bağlı</span>':'<span style="font-size:0.62rem;background:var(--surface);color:var(--text3);border:1px solid var(--border);border-radius:8px;padding:1px 6px;">Boş</span>'}
+          <span class="tc-status ${st}">${done}/${total}</span>
+        </div>
+      </div>
       <div class="tc-pairs">
         <div style="color:var(--blue);">🔵 ${ns.name}${ns.isPhantom?' 👻':''}</div>
         <div style="color:var(--gold);">🟡 ${ew.name}${ew.isPhantom?' 👻':''}</div>
       </div>
       <div style="font-size:0.7rem;color:var(--text3);">Boards ${m.boardStart||'?'}–${m.boardEnd||'?'}</div>
+      ${isLocked?`<button onclick="adminForceUnlock(${t})" style="margin-top:6px;font-size:0.65rem;background:none;border:none;color:var(--text3);cursor:pointer;text-decoration:underline;">Kilidi Zorla Kaldır</button>`:''}
     </div>`;
   }
   return html+'</div>';
@@ -1711,7 +1787,14 @@ window.adminSetup=function(){
   refreshTopbar();renderAdminPanel();
 };
 
-window.adminStart=function(){
+window.adminForceUnlock=function(tableNo){
+  const s=getState();
+  const locks=getTableLocks();
+  delete locks[s.currentRound+'_'+tableNo];
+  setTableLocks(locks);
+  toast(`🔓 Masa ${tableNo} kilidi kaldırıldı`);
+  renderAdminTab();
+};
   const s=getState();if(s.status!=='setup'){toast('Already started');return;}
   s.currentRound=1;s.status='running';setState(s);
   addLog('ok','Round 1 started','Tournament begins');
