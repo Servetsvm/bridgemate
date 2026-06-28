@@ -540,7 +540,7 @@ let _cachedPass = null;
           <div style="color:#9a958c;font-size:0.88rem;line-height:1.6;">BridgeMate requires an internet connection and must be served from a hosted domain.<br><br>Please access this app via your GitHub Pages or Firebase Hosting URL.</div>
         </div>
       </div>`;
-    throw new Error('Offline access blocked');
+    return; // stop here, don't load rest of app
   }
 })();
 
