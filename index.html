@@ -644,6 +644,7 @@ window.sessionNew=function(){
   renderAdminPanel();
 };
 window.doLogout=function(){
+  if(role==='table')unlockAllMyTables();
   if(role==='admin'){
     const st=DB.get('state');
     if(st&&st.status==='running'){
@@ -694,8 +695,33 @@ window.renderPanel=function(){
 };
 
 // ══════════════════════════════════════════════════════
-//  TABLE PANEL — BridgeMate style
+//  TABLE LOCK SYSTEM — Soft warning only
+//  tableLocks: { "round_tableNo": { lockedAt } }
 // ══════════════════════════════════════════════════════
+const getTableLocks=()=>DB.get('tableLocks')||{};
+const setTableLocks=l=>DB.set('tableLocks',l);
+
+function tableLockKey(tableNo){
+  return getState().currentRound+'_'+tableNo;
+}
+function lockTable(tableNo){
+  const locks=getTableLocks();
+  locks[tableLockKey(tableNo)]={lockedAt:Date.now(),tableNo};
+  setTableLocks(locks);
+}
+function unlockTable(tableNo){
+  const locks=getTableLocks();
+  delete locks[tableLockKey(tableNo)];
+  setTableLocks(locks);
+}
+function unlockAllMyTables(){
+  // No device ID — just clear any lock this session placed
+  if(bmTableNo)unlockTable(bmTableNo);
+}
+function isTableLocked(tableNo){
+  const locks=getTableLocks();
+  return!!locks[tableLockKey(tableNo)];
+}
 let bmTableNo=null;
 let bmSide='ns'; // 'ns' or 'ew' — which side is this device
 let boardForm={level:null,suit:null,declarer:null,result:0,doubled:'',leadSuit:'',leadRank:'',isPass:false};
@@ -703,6 +729,8 @@ let bmPollInterval=null;
 let bmTableState='select'; // 'select'|'confirm'|'play'|'approve'|'round_over'|'waiting'|'new_players'
 
 function renderTablePanel(){
+  // Release lock on current table if any
+  if(bmTableNo)unlockTable(bmTableNo);
   bmTableNo=null;bmTableState='select';
   if(bmPollInterval){clearInterval(bmPollInterval);bmPollInterval=null;}
   const s=getState();
@@ -734,9 +762,13 @@ window.bmSetSide=function(side){bmSide=side;};
 window.bmSelectTable=function(){
   const s=getState();
   const n=parseInt(document.getElementById('tableInput')?.value||'');
-  if(isNaN(n)||n<1||n>s.tableCount){toast('❌ Enter a valid table number (1-'+s.tableCount+')');return;}
+  if(isNaN(n)||n<1||n>s.tableCount){toast('❌ Geçerli bir masa numarası girin (1-'+s.tableCount+')');return;}
+  if(isTableLocked(n)){
+    // Soft warning — ask for confirmation
+    if(!confirm(`⚠️ Masa ${n} zaten başka bir cihazda açık görünüyor.\n\nYine de bu masaya girmek istiyor musunuz?`))return;
+  }
+  lockTable(n);
   bmTableNo=n;
-  // Show player name confirmation screen before entering play
   bmShowNewPlayers(n, s.currentRound);
 };
 
@@ -792,6 +824,7 @@ function renderTableDetail(tableNo){
   const boardsHTMLunused='';
 
   const allDone=doneCount===totalBoards&&totalBoards>0;
+  if(allDone)unlockTable(tableNo); // Kilit kaldır — masa tamamlandı
   let actionHTML='';
   if(allDone){
     if(s.currentRound<s.roundCount){
@@ -1077,12 +1110,13 @@ window.bmConfirmPlayersAndStart=function(tableNo,roundNo,nsId,ewId){
   const ns2=(document.getElementById('ns2inp')?.value||'').trim();
   const ew1=(document.getElementById('ew1inp')?.value||'').trim();
   const ew2=(document.getElementById('ew2inp')?.value||'').trim();
-  // Save names to pairs
   const p=getPairs();
   if(nsId&&p[nsId]){p[nsId].name=joinPairName(ns1,ns2);}
   if(ewId&&p[ewId]){p[ewId].name=joinPairName(ew1,ew2);}
   setPairs(p);
   if(ns1||ns2||ew1||ew2)addLog('ok','Oyuncu isimleri girildi',`T${tableNo} R${roundNo}: ${joinPairName(ns1,ns2)} vs ${joinPairName(ew1,ew2)}`);
+  // Re-lock for the new round
+  lockTable(tableNo);
   bmStartNewRound(tableNo,roundNo);
 };
 
@@ -1544,6 +1578,7 @@ function renderSbTab(allRows){
 function renderTablesTab(){
   const s=getState();if(!s.tableCount)return`<div class="empty-state"><div class="empty-icon">⚙️</div>Tournament not set up</div>`;
   const movements=getMovements();const pairs=getPairs();const boards=getBoards();
+  const locks=getTableLocks();
   let html='<div class="table-grid">';
   for(let t=1;t<=s.tableCount;t++){
     const m=movements[s.currentRound+'_'+t]||{};
@@ -1551,13 +1586,21 @@ function renderTablesTab(){
     let done=0,total=0;
     for(let b=m.boardStart||1;b<=(m.boardEnd||3);b++){total++;if(boards[t+'_'+s.currentRound+'_'+b]?.status==='done')done++;}
     const st=done===total&&total>0?'st-done':done>0?'st-wait':'st-empty';
+    const isLocked=!!locks[s.currentRound+'_'+t];
     html+=`<div class="table-card">
-      <div class="table-card-head"><span class="tcnum">Table ${t}</span><span class="tc-status ${st}">${done}/${total}</span></div>
+      <div class="table-card-head">
+        <span class="tcnum">Table ${t}</span>
+        <div style="display:flex;gap:4px;align-items:center;">
+          ${isLocked?'<span style="font-size:0.62rem;background:var(--greendim);color:var(--green);border:1px solid rgba(76,175,125,0.3);border-radius:8px;padding:1px 6px;">🔒 Bağlı</span>':'<span style="font-size:0.62rem;background:var(--surface);color:var(--text3);border:1px solid var(--border);border-radius:8px;padding:1px 6px;">Boş</span>'}
+          <span class="tc-status ${st}">${done}/${total}</span>
+        </div>
+      </div>
       <div class="tc-pairs">
         <div style="color:var(--blue);">🔵 ${ns.name}${ns.isPhantom?' 👻':''}</div>
         <div style="color:var(--gold);">🟡 ${ew.name}${ew.isPhantom?' 👻':''}</div>
       </div>
       <div style="font-size:0.7rem;color:var(--text3);">Boards ${m.boardStart||'?'}–${m.boardEnd||'?'}</div>
+      ${isLocked?`<button onclick="adminForceUnlock(${t})" style="margin-top:6px;font-size:0.65rem;background:none;border:none;color:var(--text3);cursor:pointer;text-decoration:underline;">Kilidi Zorla Kaldır</button>`:''}
     </div>`;
   }
   return html+'</div>';
@@ -1744,7 +1787,14 @@ window.adminSetup=function(){
   refreshTopbar();renderAdminPanel();
 };
 
-window.adminStart=function(){
+window.adminForceUnlock=function(tableNo){
+  const s=getState();
+  const locks=getTableLocks();
+  delete locks[s.currentRound+'_'+tableNo];
+  setTableLocks(locks);
+  toast(`🔓 Masa ${tableNo} kilidi kaldırıldı`);
+  renderAdminTab();
+};
   const s=getState();if(s.status!=='setup'){toast('Already started');return;}
   s.currentRound=1;s.status='running';setState(s);
   addLog('ok','Round 1 started','Tournament begins');
