@@ -833,6 +833,11 @@ function renderTableDetail(tableNo){
     if(!myBoards.length)return '';
     let html='';
     myBoards.forEach(function(boardNo){
+      // Only show other results if THIS table has already completed this board
+      const myKey=tableNo+'_'+s.currentRound+'_'+boardNo;
+      const myBoard=boards2[myKey];
+      if(!myBoard||myBoard.status!=='done')return; // not yet played by us → hide
+
       const results=[];
       Object.entries(movements2).forEach(function([mk,mv]){
         const parts=mk.split('_');if(parts.length!==2)return;
@@ -842,9 +847,8 @@ function renderTableDetail(tableNo){
           const bkey=t+'_'+r+'_'+boardNo;
           const bd=boards2[bkey];
           if(bd&&bd.status==='done'&&typeof bd.nsScore==='number'){
-            results.push({table:t,round:r,nsScore:bd.nsScore,contract:bd.contract||'?',pending:false});return;
+            results.push({table:t,round:r,nsScore:bd.nsScore,contract:bd.contract||'?'});return;
           }
-          // Don't show pending approvals from other tables as completed scores
         }
       });
       if(!results.length)return;
@@ -853,7 +857,7 @@ function renderTableDetail(tableNo){
         const sc=o.nsScore>0?'var(--green)':o.nsScore<0?'var(--red)':'var(--gold)';
         html+='<div style="display:flex;justify-content:space-between;align-items:center;background:var(--surface2);border-radius:6px;padding:5px 10px;margin-bottom:3px;font-size:0.77rem;">'
           +'<span style="color:var(--text3);white-space:nowrap;">T'+o.table+' R'+o.round+'</span>'
-          +'<span style="font-family:\'Share Tech Mono\',monospace;flex:1;text-align:center;padding:0 6px;">'+(o.contract!=='?'?o.contract:'—')+(o.pending?' ⏳':'')+'</span>'
+          +'<span style="font-family:\'Share Tech Mono\',monospace;flex:1;text-align:center;padding:0 6px;">'+(o.contract!=='?'?o.contract:'—')+'</span>'
           +'<span style="font-weight:700;color:'+sc+';white-space:nowrap;">'+(o.nsScore>0?'+':'')+o.nsScore+'</span>'
           +'</div>';
       });
@@ -1289,19 +1293,8 @@ function renderApprovalWaiting(boardNo,boardData,key){
   const scoreColor=typeof nsScore==='number'?(nsScore>0?'var(--green)':nsScore<0?'var(--red)':'var(--gold)'):'var(--gold)';
 
   function buildOtherHTML(){
-    const others=getOtherTablesSameBoard(boardNo,bmTableNo,s.currentRound);
-    if(!others.length)return '<div style="font-size:0.75rem;color:var(--text3);margin-top:8px;text-align:center;">Other tables have not played yet</div>';
-    let h='<div style="margin-top:10px;"><div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Same board — Other tables ('+others.length+')</div>';
-    others.forEach(function(o){
-      const sc=o.nsScore>0?'var(--green)':o.nsScore<0?'var(--red)':'var(--gold)';
-      const contractStr=o.contract&&o.contract!=='?'?o.contract:'—';
-      h+='<div style="display:flex;justify-content:space-between;align-items:center;background:var(--surface2);border-radius:6px;padding:6px 10px;margin-bottom:4px;font-size:0.78rem;">'
-        +'<span style="color:var(--text3);white-space:nowrap;">T'+o.table+' R'+o.round+'</span>'
-        +'<span style="font-family:\'Share Tech Mono\',monospace;flex:1;text-align:center;padding:0 6px;">'+contractStr+(o.pending?' ⏳':'')+'</span>'
-        +'<span style="font-weight:700;color:'+sc+';white-space:nowrap;">'+(o.nsScore>0?'+':'')+o.nsScore+'</span>'
-        +'</div>';
-    });
-    return h+'</div>';
+    // Diğer masaların sonuçlarını approval ekranında gösterme — board henüz tamamlanmadı
+    return '';
   }
   const otherTablesHTML=buildOtherHTML();
   document.getElementById('panelContent').innerHTML=`
@@ -1317,7 +1310,6 @@ function renderApprovalWaiting(boardNo,boardData,key){
         <div class="approval-contract">${boardData.contract||'PASS'}</div>
         <div class="approval-score" style="color:${scoreColor};">NS: ${scoreStr}</div>
         <div class="approval-waiting">Waiting for opponent device to confirm...</div>
-        <div id="otherTablesDiv">${otherTablesHTML}</div>
         <div style="display:flex;gap:8px;margin-top:10px;">
           <button class="btn btn-ghost btn-full" onclick="bmCancelApproval('${key}');renderTableDetail(${bmTableNo});">✕ Cancel</button>
           <button class="btn btn-green btn-full" onclick="bmSelfApprove('${key}',${bmTableNo})">✅ Both Agreed</button>
@@ -1330,9 +1322,6 @@ function renderApprovalWaiting(boardNo,boardData,key){
   bmPollInterval=setInterval(()=>{
     const aps=getApprovals();
     const ap=aps[key];
-    // Refresh other tables display
-    const otherDiv=document.getElementById('otherTablesDiv');
-    if(otherDiv)otherDiv.innerHTML=buildOtherHTML();
     if(!ap||ap.status==='approved'){
       clearInterval(bmPollInterval);bmPollInterval=null;
       const bs=getBoards();
