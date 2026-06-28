@@ -1223,18 +1223,27 @@ window.saveBoardAndSendApproval=function(boardNo){
 
 function getOtherTablesSameBoard(boardNo,myTableNo,myRound){
   const boards=getBoards();const movements=getMovements();const pairs=getPairs();
+  const approvals=getApprovals();
   const results=[];
   Object.entries(movements).forEach(([mk,m])=>{
     const parts=mk.split('_');if(parts.length!==2)return;
     const r=parseInt(parts[0]);const t=parseInt(parts[1]);
-    if(r!==myRound||t===myTableNo)return;
+    // Skip my own table+round combo
+    if(t===myTableNo&&r===myRound)return;
     if(boardNo>=m.boardStart&&boardNo<=m.boardEnd){
       const bkey=t+'_'+r+'_'+boardNo;
+      const ns=pairs[m.ns]||{name:m.ns||'?'};
+      const ew=pairs[m.ew]||{name:m.ew||'?'};
+      // Check completed boards
       const bd=boards[bkey];
       if(bd&&bd.status==='done'&&typeof bd.nsScore==='number'){
-        const ns=pairs[m.ns]||{name:m.ns||'?'};
-        const ew=pairs[m.ew]||{name:m.ew||'?'};
-        results.push({table:t,ns:ns.name,ew:ew.name,nsScore:bd.nsScore,contract:bd.contract||'?'});
+        results.push({table:t,round:r,ns:ns.name,ew:ew.name,nsScore:bd.nsScore,contract:bd.contract||'?',pending:false});
+        return;
+      }
+      // Also show boards pending approval at other tables
+      const ap=approvals[bkey];
+      if(ap&&typeof ap.nsScore==='number'){
+        results.push({table:t,round:r,ns:ns.name,ew:ew.name,nsScore:ap.nsScore,contract:ap.contract||'?',pending:true});
       }
     }
   });
@@ -1250,12 +1259,12 @@ function renderApprovalWaiting(boardNo,boardData,key){
   function buildOtherHTML(){
     const others=getOtherTablesSameBoard(boardNo,bmTableNo,s.currentRound);
     if(!others.length)return '<div style="font-size:0.75rem;color:var(--text3);margin-top:8px;text-align:center;">Other tables have not played yet</div>';
-    let h='<div style="margin-top:10px;"><div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Same board — Other tables</div>';
+    let h='<div style="margin-top:10px;"><div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Same board — Other tables ('+others.length+')</div>';
     others.forEach(function(o){
       const sc=o.nsScore>0?'var(--green)':o.nsScore<0?'var(--red)':'var(--gold)';
       h+='<div style="display:flex;justify-content:space-between;align-items:center;background:var(--surface2);border-radius:6px;padding:6px 10px;margin-bottom:4px;font-size:0.78rem;">'
-        +'<span style="color:var(--text3);">Table '+o.table+'</span>'
-        +'<span style="font-family:\'Share Tech Mono\',monospace;">'+o.contract+'</span>'
+        +'<span style="color:var(--text3);">T'+o.table+' R'+o.round+'</span>'
+        +'<span style="font-family:\'Share Tech Mono\',monospace;">'+o.contract+(o.pending?' ⏳':'')+'</span>'
         +'<span style="font-weight:700;color:'+sc+';">'+(o.nsScore>0?'+':'')+o.nsScore+'</span>'
         +'</div>';
     });
