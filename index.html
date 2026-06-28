@@ -616,29 +616,42 @@ selRole('admin');
 window.doLogin=async function(){
   const err=document.getElementById('loginErr');err.textContent='';
   const pw=document.getElementById('pwInput').value;
-  // Screen role has no password
+  const loginBtn=document.querySelector('.btn-primary');
+
+  // Screen role — no password needed
   if(role==='screen'){
     document.getElementById('loginScreen').style.display='none';
     document.getElementById('app').style.display='flex';
     document.getElementById('topbarRole').textContent='Screen';
+    await preloadCache();
     refreshTopbar();renderPanel();
+    DB.subscribe('state',()=>{refreshTopbar();renderPanel();});
     return;
   }
-  const loginBtn=document.querySelector('.btn-primary');
+
+  // Check password
   if(loginBtn){loginBtn.disabled=true;loginBtn.textContent='Checking...';}
   let PASS;
   try{ PASS = await loadPasswords(); }
   catch(e){ PASS = {...DEFAULT_PASS}; }
   if(loginBtn){loginBtn.disabled=false;loginBtn.textContent='Login';}
+
   if(role==='admin'&&pw!==PASS.admin){err.textContent='❌ Wrong password';return;}
   if(role==='table'&&pw!==PASS.table){err.textContent='❌ Wrong password';return;}
+
+  // Preload all data from Firebase
+  if(loginBtn){loginBtn.disabled=true;loginBtn.textContent='Loading...';}
+  await preloadCache();
+  if(loginBtn){loginBtn.disabled=false;loginBtn.textContent='Login';}
+
+  // Enter app
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('app').style.display='flex';
+  document.getElementById('topbarRole').textContent=role==='admin'?'Admin':'Table';
+
   if(role==='admin'){
     const st=getState();
-    if(snap&&st&&st.status==='running'){
-      // Ask user: new or continue
-      document.getElementById('loginScreen').style.display='none';
-      document.getElementById('app').style.display='flex';
-      document.getElementById('topbarRole').textContent='Admin';
+    if(st&&st.status==='running'){
       refreshTopbar();
       document.getElementById('panelContent').innerHTML=`
         <div style="max-width:420px;margin:40px auto;padding:0 14px;">
@@ -652,17 +665,15 @@ window.doLogin=async function(){
             </div>
           </div>
         </div>`;
+      DB.subscribe('state',()=>{refreshTopbar();});
+      DB.subscribe('approvals',()=>{if(adminTab==='setup')renderAdminTab();});
       return;
     }
   }
-  document.getElementById('loginScreen').style.display='none';
-  document.getElementById('app').style.display='flex';
-  document.getElementById('topbarRole').textContent=role==='admin'?'Admin':role==='table'?'Table':'Screen';
-  await preloadCache();
+
   refreshTopbar();renderPanel();
-  // Start real-time subscriptions
-  DB.subscribe('state', ()=>{ refreshTopbar(); if(role!=='admin') renderPanel(); });
-  if(role==='admin') DB.subscribe('approvals', ()=>renderPanel());
+  DB.subscribe('state',()=>{refreshTopbar();if(role!=='admin')renderPanel();});
+  if(role==='admin') DB.subscribe('approvals',()=>{if(adminTab==='setup')renderAdminTab();});
 };
 window.sessionContinue=function(){renderAdminPanel();};
 window.sessionNew=function(){
