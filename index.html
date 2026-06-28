@@ -16,7 +16,7 @@
   --green:#4caf7d;--greendim:rgba(76,175,125,0.12);
   --blue:#5b9bd5;--bluedim:rgba(91,155,213,0.12);
   --purple:#a78bfa;--purpledim:rgba(167,139,250,0.12);
-  --lcd:#8bac0f;--lcdbg:#0f380f;
+  --lcd:#8bac0f;--lcdbg:#0f380f;/* lcd vars kept for compat */
   --radius:12px;--radius-sm:8px;
   --shadow:0 8px 32px rgba(0,0,0,0.6);
 }
@@ -92,13 +92,13 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .modal-actions{display:flex;gap:7px;margin-top:14px;}
 .modal-actions .btn{flex:1;}
 
-/* LCD BRIDGEMATE SCREEN */
-.bm-device{max-width:320px;margin:0 auto;padding:10px 0;}
-.bm-lcd{background:var(--lcdbg);border:3px solid #2a4a0a;border-radius:6px;padding:10px 12px;font-family:'Share Tech Mono',monospace;margin-bottom:16px;box-shadow:inset 0 2px 8px rgba(0,0,0,0.5),0 0 12px rgba(139,172,15,0.08);}
-.bm-lcd-row{font-size:0.78rem;color:var(--lcd);letter-spacing:0.5px;line-height:1.7;white-space:pre;}
-.bm-lcd-row.inv{background:var(--lcd);color:var(--lcdbg);padding:0 2px;}
-.bm-lcd-row.blink{animation:blink 1s infinite;}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
+/* INFO BAR (replaces LCD) */
+.bm-device{max-width:360px;margin:0 auto;padding:10px 0;}
+.bm-lcd{background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:14px;}
+.bm-lcd-row{font-size:0.82rem;color:var(--text2);letter-spacing:0.2px;line-height:1.7;white-space:pre;font-family:'DM Sans',sans-serif;}
+.bm-lcd-row.inv{background:var(--gold);color:#0f0e0c;border-radius:4px;padding:1px 6px;font-weight:700;font-size:0.78rem;}
+.bm-lcd-row.blink{animation:blink 1.2s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.4}}
 
 .bm-suit-row{display:grid;grid-template-columns:repeat(5,1fr);gap:5px;margin-bottom:10px;}
 .bm-suit-btn{padding:10px 4px;background:var(--surface2);border:2px solid var(--border);border-radius:6px;cursor:pointer;text-align:center;font-size:1rem;font-weight:700;transition:all 0.12s;font-family:inherit;color:var(--text);}
@@ -136,11 +136,11 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
 .result-disp{font-size:1.3rem;font-weight:700;color:var(--gold);min-width:48px;text-align:center;font-family:'Share Tech Mono',monospace;}
 .result-label{font-size:0.76rem;color:var(--text2);flex:1;}
 
-.score-preview{background:var(--lcdbg);border:1px solid #2a4a0a;border-radius:6px;padding:8px 12px;text-align:center;margin-bottom:10px;font-family:'Share Tech Mono',monospace;}
-.sp-label{font-size:0.65rem;color:var(--lcd);opacity:0.7;margin-bottom:2px;}
-.sp-val{font-size:1.4rem;font-weight:700;color:var(--lcd);}
-.sp-val.pos{color:#8bac0f;}
-.sp-val.neg{color:#e05a4e;}
+.score-preview{background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:10px 12px;text-align:center;margin-bottom:10px;}
+.sp-label{font-size:0.65rem;color:var(--text3);opacity:0.9;margin-bottom:2px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;}
+.sp-val{font-size:1.5rem;font-weight:700;color:var(--text);}
+.sp-val.pos{color:var(--green);}
+.sp-val.neg{color:var(--red);}
 
 .pair-confirm{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px;}
 .pair-box{border-radius:var(--radius-sm);padding:12px;text-align:center;}
@@ -713,15 +713,13 @@ function renderTablePanel(){
   }
   c.innerHTML=`
     <div class="bm-device">
-      <div class="bm-lcd">
-        <div class="bm-lcd-row">BRIDGEMATE  v4.0   </div>
-        <div class="bm-lcd-row inv">ROUND ${String(s.currentRound).padStart(2,'0')}    ${s.name.slice(0,12).toUpperCase()}</div>
-        <div class="bm-lcd-row">ENTER TABLE NUMBER </div>
-        <div class="bm-lcd-row blink">_________________  </div>
+      <div class="bm-lcd" style="text-align:center;">
+        <div class="bm-lcd-row inv" style="display:inline-block;margin-bottom:6px;">BridgeMate · Round ${String(s.currentRound).padStart(2,'0')}</div>
+        <div class="bm-lcd-row" style="text-align:center;color:var(--text);">Select your table number</div>
       </div>
       <div style="display:flex;flex-direction:column;align-items:center;gap:10px;">
         <input type="number" id="tableInput" min="1" max="${s.tableCount}" inputmode="numeric"
-          style="font-family:'Share Tech Mono',monospace;font-size:2rem;text-align:center;padding:12px;width:140px;background:var(--lcdbg);border:2px solid var(--lcd);border-radius:6px;color:var(--lcd);outline:none;">
+          style="font-size:2rem;text-align:center;padding:12px;width:140px;background:var(--surface2);border:2px solid var(--border2);border-radius:var(--radius);color:var(--text);outline:none;font-family:'DM Sans',sans-serif;">
         <div style="display:flex;gap:8px;">
           <button class="btn btn-ghost" onclick="bmSetSide('ns');bmSelectTable()">🔵 NS Side</button>
           <button class="btn btn-ghost" onclick="bmSetSide('ew');bmSelectTable()">🟡 EW Side</button>
@@ -812,10 +810,10 @@ function renderTableDetail(tableNo){
         ${isPhantom?'<span class="phantom-badge">PHANTOM</span>':''}
       </div>
       <div class="bm-lcd">
-        <div class="bm-lcd-row inv">${lcdLine1.slice(0,20).padEnd(20)}</div>
-        <div class="bm-lcd-row">NS: ${nsPair.name.slice(0,16).padEnd(16)}</div>
-        <div class="bm-lcd-row">EW: ${ewPair.name.slice(0,16).padEnd(16)}</div>
-        <div class="bm-lcd-row">${s.scoring==='IMP'?'IMP':'MP'} SCORING          </div>
+        <div class="bm-lcd-row inv">Round ${s.currentRound}  ·  Table ${tableNo}  ·  Boards ${m.boardStart||'?'}–${m.boardEnd||'?'}</div>
+        <div class="bm-lcd-row">🔵 NS: ${nsPair.name.slice(0,22)}</div>
+        <div class="bm-lcd-row">🟡 EW: ${ewPair.name.slice(0,22)}</div>
+        <div class="bm-lcd-row" style="color:var(--gold);font-size:0.72rem;">${s.scoring==='IMP'?'IMP Scoring':'Matchpoint Scoring'}</div>
       </div>
       <div id="boardsSection">
         <div class="card">
@@ -846,10 +844,7 @@ function renderTableDetail(tableNo){
           if(bd&&bd.status==='done'&&typeof bd.nsScore==='number'){
             results.push({table:t,round:r,nsScore:bd.nsScore,contract:bd.contract||'?',pending:false});return;
           }
-          const ap=approvals2[bkey];
-          if(ap&&typeof ap.nsScore==='number'){
-            results.push({table:t,round:r,nsScore:ap.nsScore,contract:ap.contract||'?',pending:true});
-          }
+          // Don't show pending approvals from other tables as completed scores
         }
       });
       if(!results.length)return;
@@ -1000,10 +995,10 @@ window.bmShowWaiting=function(tableNo){
   document.getElementById('panelContent').innerHTML=`
     <div class="bm-device" style="max-width:360px;">
       <div class="bm-lcd">
-        <div class="bm-lcd-row inv">TABLE ${String(tableNo).padStart(2,' ')}  ROUND ${String(nextR).padStart(2,' ')}    </div>
-        <div class="bm-lcd-row">WAITING FOR PLAYERS</div>
-        <div class="bm-lcd-row blink">NS:${(nextNS.name||'').slice(0,6).padEnd(6)} EW:${(nextEW.name||'').slice(0,6).padEnd(6)} </div>
-        <div class="bm-lcd-row">BOARDS ${nextM.boardStart||'?'} TO ${nextM.boardEnd||'?'}      </div>
+        <div class="bm-lcd-row inv">Table ${String(tableNo).padStart(2,' ')}  ·  Round ${String(nextR).padStart(2,' ')}</div>
+        <div class="bm-lcd-row">Waiting for Players</div>
+        <div class="bm-lcd-row blink">🔵 ${(nextNS.name||'').slice(0,10)}  🟡 ${(nextEW.name||'').slice(0,10)}</div>
+        <div class="bm-lcd-row">Boards ${nextM.boardStart||'?'} – ${nextM.boardEnd||'?'}</div>
       </div>
       <div class="waiting-screen">
         <div class="waiting-icon">⏳</div>
@@ -1105,11 +1100,10 @@ function renderBoardForm(boardNo,vuln,existing){
         ${existing?'<span style="font-size:0.7rem;color:var(--text3);">(editing)</span>':''}
       </div>
       <div class="bm-lcd" id="lcdDisplay">
-        <div class="bm-lcd-row inv">RND ${String(s.currentRound).padStart(2,' ')}  NS:${(m.ns||'').replace(/[^0-9]/g,'').padStart(2,' ')} EW:${(m.ew||'').replace(/[^0-9]/g,'').padStart(2,' ')}  B${boardNo}</div>
-        <div class="bm-lcd-row">BOARD : ${String(boardNo).padStart(2,' ')}             </div>
-        <div class="bm-lcd-row" id="lcdContr">CONTR : -              </div>
-        <div class="bm-lcd-row" id="lcdLead">LEAD  : -              </div>
-        <div class="bm-lcd-row" id="lcdResult">RESULT: -              </div>
+        <div class="bm-lcd-row inv">Round ${s.currentRound}  |  NS: ${(m.ns||'').replace(/[^0-9]/g,'')}  EW: ${(m.ew||'').replace(/[^0-9]/g,'')}  |  Board ${boardNo}</div>
+        <div class="bm-lcd-row" id="lcdContr">Contract: —</div>
+        <div class="bm-lcd-row" id="lcdLead">Lead: —</div>
+        <div class="bm-lcd-row" id="lcdResult">Result: —</div>
       </div>
       <div class="card">
         <div class="card-title" style="margin-bottom:8px;"><span>1</span> Level & Status</div>
@@ -1230,11 +1224,11 @@ function updateLCD(){
   let contr='—';
   if(boardForm.isPass)contr='PASS';
   else if(boardForm.level&&boardForm.suit){contr=boardForm.level+boardForm.suit+(boardForm.doubled||'')+(boardForm.declarer?' '+boardForm.declarer:'');}
-  lc.textContent='CONTR : '+(contr).padEnd(12);
+  lc.textContent='Contract: '+contr;
   const lead=boardForm.leadSuit&&boardForm.leadRank?boardForm.leadSuit+boardForm.leadRank:boardForm.leadSuit||'—';
-  ll.textContent='LEAD  : '+lead.padEnd(12);
+  ll.textContent='Lead: '+lead;
   const r=boardForm.result;
-  lr.textContent='RESULT: '+(boardForm.isPass?'PASS':r>0?'+'+r:r<0?String(r):'=').padEnd(12);
+  lr.textContent='Result: '+(boardForm.isPass?'PASS':r>0?'+'+r:r<0?String(r):'=');
 }
 
 // Save board and send to opponent for approval
@@ -1282,11 +1276,7 @@ function getOtherTablesSameBoard(boardNo,myTableNo,myRound){
         results.push({table:t,round:r,ns:ns.name,ew:ew.name,nsScore:bd.nsScore,contract:bd.contract||'?',pending:false});
         return;
       }
-      // Also show boards pending approval at other tables
-      const ap=approvals[bkey];
-      if(ap&&typeof ap.nsScore==='number'){
-        results.push({table:t,round:r,ns:ns.name,ew:ew.name,nsScore:ap.nsScore,contract:ap.contract||'?',pending:true});
-      }
+      // Don't show pending approvals as completed results
     }
   });
   return results;
@@ -1317,10 +1307,10 @@ function renderApprovalWaiting(boardNo,boardData,key){
   document.getElementById('panelContent').innerHTML=`
     <div class="bm-device" style="max-width:360px;">
       <div class="bm-lcd">
-        <div class="bm-lcd-row inv">BOARD ${String(boardNo).padStart(2,' ')} AWAITING APPROVAL</div>
-        <div class="bm-lcd-row">CONTR:${(boardData.contract||'PASS').padEnd(14)}</div>
-        <div class="bm-lcd-row">NS SCORE: ${String(scoreStr).padEnd(11)}</div>
-        <div class="bm-lcd-row blink">OPPONENT CONFIRM... </div>
+        <div class="bm-lcd-row inv">Board ${String(boardNo).padStart(2,' ')} — Awaiting Approval</div>
+        <div class="bm-lcd-row">Contract: ${(boardData.contract||'PASS')}</div>
+        <div class="bm-lcd-row">NS Score: ${String(scoreStr)}</div>
+        <div class="bm-lcd-row blink" style="color:var(--gold);">Waiting for opponent to confirm...</div>
       </div>
       <div class="approval-screen">
         <div class="approval-title">⏳ Waiting for opponent to confirm</div>
@@ -1762,21 +1752,26 @@ function renderPlayersAdmin(){
   const pw=keys.filter(k=>k.startsWith('p')).sort((a,b)=>parseInt(a.slice(1))-parseInt(b.slice(1)));
 
   const mkRow=k=>{const p=pairs[k];return`
-    <div class="player-name-input">
+    <div class="player-name-input" style="position:relative;">
       <span class="player-num">${k.replace('ns_','N').replace('ew_','E').replace('p','P')}</span>
       <input value="${p.name}" onchange="updatePairName('${k}',this.value)"
         placeholder="Full Name"
         style="flex:1;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem;outline:none;font-family:inherit;">
+      <button onclick="removePlayer('${k}')" title="Remove player" style="background:var(--reddim);border:1px solid rgba(224,90,78,0.3);color:var(--red);border-radius:5px;padding:4px 7px;cursor:pointer;font-size:0.8rem;line-height:1;flex-shrink:0;">✕</button>
     </div>`;};
 
   const allKeys=[...ns,...ew,...pw];
+  const s=getState();
   return`
     <div class="card">
-      <div class="card-title"><span>👥</span> Player Names</div>
+      <div class="card-title" style="justify-content:space-between;">
+        <span><span>👥</span> Player Names (${allKeys.length} pairs)</span>
+        <button class="btn btn-green btn-sm" onclick="addPlayer()">+ Add Player</button>
+      </div>
       <div class="player-name-grid">
         ${allKeys.map(mkRow).join('')}
       </div>
-      <div style="display:flex;gap:6px;margin-top:8px;">
+      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
         <button class="btn btn-gold" onclick="adminRandomNames()">🎲 Random Names</button>
         <button class="btn btn-blue btn-sm" onclick="adminImportNamesOpen()">📥 Load from File</button>
       </div>
@@ -1803,6 +1798,78 @@ function renderPlayersAdmin(){
 }
 
 window.updatePairName=function(id,name){const p=getPairs();if(p[id]){p[id].name=name.trim();setPairs(p);}};
+
+window.addPlayer=function(){
+  const p=getPairs();
+  const s=getState();
+  // Determine next available ID
+  const nsKeys=Object.keys(p).filter(k=>k.startsWith('ns_'));
+  const ewKeys=Object.keys(p).filter(k=>k.startsWith('ew_'));
+  const pKeys=Object.keys(p).filter(k=>k.startsWith('p')&&!k.startsWith('phantom'));
+  // For mitchell: add ns+ew pair; for howell: add p pair
+  const mov=s.movement||'mitchell';
+  if(mov==='mitchell'){
+    const nextNS=nsKeys.length+1;
+    const nextEW=ewKeys.length+1;
+    if(nextNS!==nextEW){toast('❌ NS/EW counts mismatch — cannot add');return;}
+    openModal('Add Player Pair',`
+      <p style="font-size:0.82rem;color:var(--text2);margin-bottom:12px;">Adding Table ${nextNS} (NS + EW pair)</p>
+      <div class="field"><label>NS Player Name</label><input id="addNsName" placeholder="Full Name" autofocus></div>
+      <div class="field"><label>EW Player Name</label><input id="addEwName" placeholder="Full Name"></div>`,
+      `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+       <button class="btn btn-green" onclick="confirmAddMitchell(${nextNS})">Add</button>`);
+  } else {
+    const next=pKeys.length+1;
+    openModal('Add Player Pair',`
+      <p style="font-size:0.82rem;color:var(--text2);margin-bottom:12px;">Adding Pair ${next}</p>
+      <div class="field"><label>Player Name</label><input id="addPName" placeholder="Full Name" autofocus></div>`,
+      `<button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+       <button class="btn btn-green" onclick="confirmAddHowell(${next})">Add</button>`);
+  }
+};
+
+window.confirmAddMitchell=function(n){
+  const nsName=document.getElementById('addNsName')?.value.trim()||('NS '+n);
+  const ewName=document.getElementById('addEwName')?.value.trim()||('EW '+n);
+  const p=getPairs();
+  p['ns_'+n]={id:'ns_'+n,name:nsName,dir:'NS',startTable:n,isPhantom:false};
+  p['ew_'+n]={id:'ew_'+n,name:ewName,dir:'EW',startTable:n,isPhantom:false};
+  setPairs(p);
+  addLog('ok','Player pair added','NS: '+nsName+' / EW: '+ewName);
+  toast('✅ Added: '+nsName+' & '+ewName);
+  closeModal();renderAdminTab();
+};
+
+window.confirmAddHowell=function(n){
+  const name=document.getElementById('addPName')?.value.trim()||('Pair '+n);
+  const p=getPairs();
+  p['p'+n]={id:'p'+n,name:name,dir:'',startTable:0,isPhantom:false};
+  setPairs(p);
+  addLog('ok','Player added','Pair '+n+': '+name);
+  toast('✅ Added: '+name);
+  closeModal();renderAdminTab();
+};
+
+window.removePlayer=function(id){
+  const p=getPairs();
+  const name=p[id]?.name||id;
+  if(!confirm('Remove "'+name+'"? This cannot be undone.'))return;
+  // For mitchell, remove the paired EW or NS too
+  const s=getState();
+  const mov=s.movement||'mitchell';
+  if(mov==='mitchell'){
+    const num=id.split('_')[1];
+    const paired=id.startsWith('ns_')?'ew_'+num:'ns_'+num;
+    if(p[paired]&&confirm('Also remove paired player "'+p[paired].name+'"?')){
+      delete p[paired];
+    }
+  }
+  delete p[id];
+  setPairs(p);
+  addLog('warn','Player removed',name);
+  toast('🗑 Removed: '+name);
+  renderAdminTab();
+};;
 window.adminBulkNames=function(){
   const raw=document.getElementById('bulkNames').value.trim();
   if(!raw){toast('❌ Enter names first');return;}
