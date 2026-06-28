@@ -796,7 +796,12 @@ function renderTableDetail(tableNo){
     if(s.currentRound<s.roundCount){
       actionHTML=`<button class="btn btn-gold btn-full" style="margin-top:10px;" onclick="bmShowRoundOver(${tableNo})">▶ Round Complete — Continue</button>`;
     } else {
-      actionHTML=`<div class="next-round-card"><div class="nr-title">🏁 Final Round</div><div class="nr-main">Tournament Complete</div></div>`;
+      actionHTML=`<div class="next-round-card">
+        <div class="nr-title">🏁 Turnuva Bitti</div>
+        <div class="nr-main" style="font-size:1rem;margin-bottom:8px;">Tüm boardlar tamamlandı</div>
+        <div class="nr-detail" style="margin-bottom:14px;">Sonuçlar Screen ekranında görülebilir</div>
+        <button class="btn btn-ghost btn-full" onclick="doLogout()" style="font-size:0.82rem;">← Çıkış Yap</button>
+      </div>`;
     }
   }
 
@@ -811,8 +816,8 @@ function renderTableDetail(tableNo){
       </div>
       <div class="bm-lcd">
         <div class="bm-lcd-row inv">Round ${s.currentRound}  ·  Table ${tableNo}  ·  Boards ${m.boardStart||'?'}–${m.boardEnd||'?'}</div>
-        <div class="bm-lcd-row">🔵 NS: ${nsPair.name.slice(0,22)}</div>
-        <div class="bm-lcd-row">🟡 EW: ${ewPair.name.slice(0,22)}</div>
+        <div class="bm-lcd-row">🔵 NS: ${nsPair.name.slice(0,30)}</div>
+        <div class="bm-lcd-row">🟡 EW: ${ewPair.name.slice(0,30)}</div>
         <div class="bm-lcd-row" style="color:var(--gold);font-size:0.72rem;">${s.scoring==='IMP'?'IMP Scoring':'Matchpoint Scoring'}</div>
       </div>
       <div id="boardsSection">
@@ -1048,14 +1053,22 @@ window.bmShowNewPlayers=function(tableNo,roundNo){
 };
 
 window.bmStartNewRound=function(tableNo,roundNo){
-  // Director must advance round — check if state is updated
   const s=getState();
   if(s.currentRound<roundNo){
-    toast('⏳ Director has not started Round '+roundNo+' yet. Please wait.');
+    toast('⏳ Direktor Round '+roundNo+' yi henüz başlatmadı. Lütfen bekleyin...');
+    // Auto-check every 3 seconds
+    if(bmPollInterval)clearInterval(bmPollInterval);
+    bmPollInterval=setInterval(()=>{
+      const s2=getState();
+      if(s2.currentRound>=roundNo){
+        clearInterval(bmPollInterval);bmPollInterval=null;
+        bmTableNo=tableNo;
+        renderTableDetail(tableNo);
+      }
+    },3000);
     return;
   }
   bmTableNo=tableNo;
-  bmSide='ns';
   renderTableDetail(tableNo);
 };
 
@@ -1411,7 +1424,7 @@ window.screenPrintPDF=function(){
       <td style="font-weight:700;">Board ${b}</td>
       <td style="color:#1565c0;">${ns.name}</td>
       <td style="color:#e65100;">${ew.name}</td>
-      <td style="font-family:monospace;">${d.adjusted?'[ADJ] ':''}\${d.contract||'PASS'}</td>
+      <td style="font-family:monospace;">${d.adjusted?'[ADJ] ':''}${d.contract||'PASS'}</td>
       <td style="font-family:monospace;color:#555;">${d.lead||'—'}</td>
       <td style="font-weight:700;color:${typeof d.nsScore==='number'?(d.nsScore>0?'#2e7d32':d.nsScore<0?'#c62828':'#555'):'#7b1fa2'};">${sc}</td>
     </tr>`;
@@ -1601,6 +1614,34 @@ function renderSetup(){
   </div>
   <div class="card">
     <div class="card-title"><span>🎮</span> Round Control</div>
+    ${(()=>{
+      if(s.status!=='running')return '';
+      const boards=getBoards();const movements=getMovements();
+      let totalBoards=0,doneBoards=0;
+      for(let t=1;t<=s.tableCount;t++){
+        const m=movements[s.currentRound+'_'+t]||{};
+        for(let b=m.boardStart||1;b<=(m.boardEnd||3);b++){
+          totalBoards++;
+          if(boards[t+'_'+s.currentRound+'_'+b]?.status==='done')doneBoards++;
+        }
+      }
+      const allDone=totalBoards>0&&doneBoards>=totalBoards;
+      if(allDone&&s.currentRound<s.roundCount){
+        return`<div style="background:rgba(76,175,125,0.15);border:2px solid var(--green);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+          <span style="font-size:1.5rem;">✅</span>
+          <div><div style="font-weight:700;color:var(--green);font-size:0.88rem;">Tüm masalar Round ${s.currentRound} bitti!</div>
+          <div style="font-size:0.76rem;color:var(--text2);margin-top:2px;">${doneBoards}/${totalBoards} board tamamlandı. Round ${s.currentRound+1} başlatabilirsiniz.</div></div>
+        </div>`;
+      }
+      if(allDone&&s.currentRound>=s.roundCount){
+        return`<div style="background:rgba(201,168,76,0.15);border:2px solid var(--gold);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:10px;display:flex;align-items:center;gap:10px;">
+          <span style="font-size:1.5rem;">🏁</span>
+          <div><div style="font-weight:700;color:var(--gold);font-size:0.88rem;">Turnuva bitti!</div>
+          <div style="font-size:0.76rem;color:var(--text2);margin-top:2px;">Tüm roundlar tamamlandı. Turnuvayı bitirebilirsiniz.</div></div>
+        </div>`;
+      }
+      return`<div style="font-size:0.78rem;color:var(--text2);margin-bottom:8px;">Round ${s.currentRound}: ${doneBoards}/${totalBoards} board tamamlandı</div>`;
+    })()}
     <div class="round-card">
       <div class="rc-head">
         <span class="rc-num">Round ${s.currentRound||0} / ${s.roundCount||0}</span>
@@ -1675,6 +1716,7 @@ window.adminStart=function(){
   s.currentRound=1;s.status='running';setState(s);
   addLog('ok','Round 1 started','Tournament begins');
   toast('▶ Round 1 started!');refreshTopbar();renderAdminTab();
+  adminSetupAutoRefresh();
 };
 window.adminNextRound=function(){
   const s=getState();
@@ -1683,6 +1725,17 @@ window.adminNextRound=function(){
   addLog('ok','Round '+s.currentRound+' started','');
   toast('▶ Round '+s.currentRound+' started!');refreshTopbar();renderAdminTab();
 };
+
+let adminRefreshTimer=null;
+function adminSetupAutoRefresh(){
+  if(adminRefreshTimer)clearInterval(adminRefreshTimer);
+  adminRefreshTimer=setInterval(()=>{
+    if(adminTab==='setup'&&role==='admin'){
+      const c=document.getElementById('adminContent');
+      if(c)c.innerHTML=renderSetup();
+    }
+  },5000);
+}
 window.adminFinish=function(){
   if(!confirm('Finish tournament?'))return;
   const s=getState();
@@ -1733,6 +1786,19 @@ window.adminReset=function(){
 };
 
 // ── Players Admin ──
+// ── Players Admin ──
+function splitPairName(name){
+  // Split "Alice Smith & Bob Jones" → ["Alice Smith","Bob Jones"]
+  if(!name)return['',''];
+  const parts=name.split(' & ');
+  return[parts[0]||'',parts[1]||''];
+}
+function joinPairName(p1,p2){
+  const a=(p1||'').trim();const b=(p2||'').trim();
+  if(a&&b)return a+' & '+b;
+  return a||b||'';
+}
+
 function renderPlayersAdmin(){
   const pairs=getPairs();const keys=Object.keys(pairs).filter(k=>!pairs[k].isPhantom);
   if(!keys.length)return`<div class="empty-state"><div class="empty-icon">👥</div>Create tournament first</div>`;
@@ -1740,44 +1806,56 @@ function renderPlayersAdmin(){
   const ew=keys.filter(k=>k.startsWith('ew_')).sort((a,b)=>parseInt(a.split('_')[1])-parseInt(b.split('_')[1]));
   const pw=keys.filter(k=>k.startsWith('p')).sort((a,b)=>parseInt(a.slice(1))-parseInt(b.slice(1)));
 
-  const mkRow=k=>{const p=pairs[k];return`
-    <div class="player-name-input" style="position:relative;">
-      <span class="player-num">${k.replace('ns_','N').replace('ew_','E').replace('p','P')}</span>
-      <input value="${p.name}" onchange="updatePairName('${k}',this.value)"
-        placeholder="Full Name"
-        style="flex:1;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem;outline:none;font-family:inherit;">
-      <button onclick="removePlayer('${k}')" title="Remove player" style="background:var(--reddim);border:1px solid rgba(224,90,78,0.3);color:var(--red);border-radius:5px;padding:4px 7px;cursor:pointer;font-size:0.8rem;line-height:1;flex-shrink:0;">✕</button>
+  const dirLabel=k=>k.startsWith('ns_')?`🔵 NS ${k.split('_')[1]}`:k.startsWith('ew_')?`🟡 EW ${k.split('_')[1]}`:`⚪ Pair ${k.slice(1)}`;
+  const mkRow=k=>{
+    const p=pairs[k];
+    const [p1,p2]=splitPairName(p.name);
+    return`
+    <div class="card" style="margin-bottom:8px;padding:12px 14px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <span style="font-size:0.72rem;font-weight:700;color:${k.startsWith('ns_')?'var(--blue)':k.startsWith('ew_')?'var(--gold)':'var(--text3)'};">${dirLabel(k)}</span>
+        <button onclick="removePlayer('${k}')" style="background:var(--reddim);border:1px solid rgba(224,90,78,0.3);color:var(--red);border-radius:5px;padding:3px 8px;cursor:pointer;font-size:0.72rem;">✕ Sil</button>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+        <div>
+          <div style="font-size:0.65rem;color:var(--text3);margin-bottom:3px;">Oyuncu 1 (İsim Soyisim)</div>
+          <input value="${p1}" placeholder="İsim Soyisim" data-pair="${k}" data-slot="1"
+            oninput="updatePairSlot('${k}',1,this.value)"
+            style="width:100%;padding:7px 9px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.82rem;outline:none;font-family:inherit;">
+        </div>
+        <div>
+          <div style="font-size:0.65rem;color:var(--text3);margin-bottom:3px;">Oyuncu 2 (İsim Soyisim)</div>
+          <input value="${p2}" placeholder="İsim Soyisim" data-pair="${k}" data-slot="2"
+            oninput="updatePairSlot('${k}',2,this.value)"
+            style="width:100%;padding:7px 9px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.82rem;outline:none;font-family:inherit;">
+        </div>
+      </div>
     </div>`;};
 
   const allKeys=[...ns,...ew,...pw];
-  const s=getState();
   return`
-    <div class="card">
-      <div class="card-title" style="justify-content:space-between;">
-        <span><span>👥</span> Player Names (${allKeys.length} pairs)</span>
-        <button class="btn btn-green btn-sm" onclick="addPlayer()">+ Add Player</button>
-      </div>
-      <div class="player-name-grid">
-        ${allKeys.map(mkRow).join('')}
-      </div>
-      <div style="display:flex;gap:6px;margin-top:8px;flex-wrap:wrap;">
-        <button class="btn btn-gold" onclick="adminRandomNames()">🎲 Random Names</button>
-        <button class="btn btn-blue btn-sm" onclick="adminImportNamesOpen()">📥 Load from File</button>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;flex-wrap:wrap;gap:6px;">
+      <div style="font-size:0.82rem;color:var(--text2);">${allKeys.length} pair · ${allKeys.length*2} oyuncu</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="btn btn-green btn-sm" onclick="addPlayer()">+ Pair Ekle</button>
+        <button class="btn btn-gold btn-sm" onclick="adminRandomNames()">🎲 Rastgele İsim</button>
+        <button class="btn btn-blue btn-sm" onclick="adminImportNamesOpen()">📥 Dosyadan Yükle</button>
       </div>
     </div>
+    ${allKeys.map(mkRow).join('')}
     <div class="card">
-      <div class="card-title"><span>📥</span> Bulk Name Import</div>
-      <p style="font-size:0.8rem;color:var(--text2);margin-bottom:8px;">One name per line. Will fill in order.</p>
-      <div class="field"><textarea id="bulkNames" rows="6" placeholder="Alice Smith&#10;Bob Jones&#10;Carol White&#10;..."></textarea></div>
-      <button class="btn btn-gold btn-full" onclick="adminBulkNames()">Load Names</button>
+      <div class="card-title"><span>📥</span> Toplu İsim Yükle</div>
+      <p style="font-size:0.8rem;color:var(--text2);margin-bottom:8px;">Her satıra bir isim. Sırayla doldurulur (1. oyuncu, 2. oyuncu, ...).</p>
+      <div class="field"><textarea id="bulkNames" rows="6" placeholder="Alice Smith&#10;Bob Jones&#10;Carol White&#10;David Brown&#10;..."></textarea></div>
+      <button class="btn btn-gold btn-full" onclick="adminBulkNames()">Yükle</button>
     </div>
     <div class="card">
-      <div class="card-title"><span>📂</span> Load Board File</div>
-      <p style="font-size:0.8rem;color:var(--text2);margin-bottom:8px;">Load a previously saved JSON file or continue without one.</p>
+      <div class="card-title"><span>📂</span> Board Dosyası Yükle</div>
+      <p style="font-size:0.8rem;color:var(--text2);margin-bottom:8px;">Daha önce kaydedilmiş JSON dosyasını yükle.</p>
       <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px;">
-        <button class="btn btn-gold btn-sm" onclick="document.getElementById('boardFile').click()">📄 Load JSON</button>
-        <button class="btn btn-blue btn-sm" onclick="adminImportHandsOpen()">🃏 PBN/LIN Load Hands</button>
-        <button class="btn btn-ghost btn-sm" onclick="toast('Continuing without hand file...')">▶ Skip, Continue</button>
+        <button class="btn btn-gold btn-sm" onclick="document.getElementById('boardFile').click()">📄 JSON Yükle</button>
+        <button class="btn btn-blue btn-sm" onclick="adminImportHandsOpen()">🃏 PBN/LIN</button>
+        <button class="btn btn-ghost btn-sm" onclick="toast('Dosyasız devam ediliyor...')">▶ Atla</button>
       </div>
       <div class="import-drop" onclick="document.getElementById('boardFile').click()">
         <div style="font-size:2rem;">📂</div><div style="font-weight:600;">Drag / Select boards.json</div>
@@ -1787,6 +1865,13 @@ function renderPlayersAdmin(){
 }
 
 window.updatePairName=function(id,name){const p=getPairs();if(p[id]){p[id].name=name.trim();setPairs(p);}};
+
+window.updatePairSlot=function(id,slot,val){
+  const p=getPairs();if(!p[id])return;
+  const [p1,p2]=splitPairName(p[id].name);
+  p[id].name=slot===1?joinPairName(val,p2):joinPairName(p1,val);
+  setPairs(p);
+};
 
 window.addPlayer=function(){
   const p=getPairs();
@@ -1861,15 +1946,18 @@ window.removePlayer=function(id){
 };;
 window.adminBulkNames=function(){
   const raw=document.getElementById('bulkNames').value.trim();
-  if(!raw){toast('❌ Enter names first');return;}
+  if(!raw){toast('❌ Önce isim girin');return;}
   const names=raw.split('\n').map(s=>s.trim()).filter(Boolean);
   const p=getPairs();
   const nsKeys=Object.keys(p).filter(k=>k.startsWith('ns_')).sort((a,b)=>parseInt(a.split('_')[1])-parseInt(b.split('_')[1]));
   const ewKeys=Object.keys(p).filter(k=>k.startsWith('ew_')).sort((a,b)=>parseInt(a.split('_')[1])-parseInt(b.split('_')[1]));
-  const pKeys=Object.keys(p).filter(k=>k.startsWith('p')).sort((a,b)=>parseInt(a.slice(1))-parseInt(b.slice(1)));
+  const pKeys=Object.keys(p).filter(k=>k.startsWith('p')&&!k.startsWith('phantom')).sort((a,b)=>parseInt(a.slice(1))-parseInt(b.slice(1)));
   let i=0;
-  [...nsKeys,...ewKeys,...pKeys].forEach(k=>{if(names[i])p[k].name=names[i++];});
-  setPairs(p);addLog('ok','Bulk names loaded',`${i} pairs`);toast(`✅ ${i} names loaded`);renderAdminTab();
+  [...nsKeys,...ewKeys,...pKeys].forEach(k=>{
+    const n1=names[i++]||'';const n2=names[i++]||'';
+    p[k].name=joinPairName(n1,n2);
+  });
+  setPairs(p);addLog('ok','Toplu isim yüklendi',`${i} isim`);toast(`✅ ${i} isim yüklendi`);renderAdminTab();
 };
 const DEMO_NAMES=['Alice Johnson','Bob Smith','Carol White','David Brown','Emma Davis','Frank Miller','Grace Wilson','Henry Taylor','Iris Anderson','Jack Martin','Kate Thompson','Liam Garcia','Mia Martinez','Noah Lee','Olivia Harris','Paul Clark','Quinn Lewis','Rachel Walker','Sam Hall','Tina Allen','Uma Young','Victor King','Wendy Wright','Xavier Scott'];
 window.adminRandomNames=function(){
