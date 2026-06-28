@@ -827,6 +827,48 @@ function renderTableDetail(tableNo){
       </div>
     </div>`;
 
+  // Other tables — same boards (all rounds, all tournament types)
+  function buildDetailOtherHTML(){
+    const boards2=getBoards();const movements2=getMovements();const pairs2=getPairs();const approvals2=getApprovals();
+    const myBoards=[];
+    for(let b=m.boardStart||1;b<=(m.boardEnd||3);b++)myBoards.push(b);
+    if(!myBoards.length)return '';
+    let html='';
+    myBoards.forEach(function(boardNo){
+      const results=[];
+      Object.entries(movements2).forEach(function([mk,mv]){
+        const parts=mk.split('_');if(parts.length!==2)return;
+        const r=parseInt(parts[0]);const t=parseInt(parts[1]);
+        if(t===tableNo&&r===s.currentRound)return;
+        if(boardNo>=(mv.boardStart||1)&&boardNo<=(mv.boardEnd||999)){
+          const bkey=t+'_'+r+'_'+boardNo;
+          const bd=boards2[bkey];
+          if(bd&&bd.status==='done'&&typeof bd.nsScore==='number'){
+            results.push({table:t,round:r,nsScore:bd.nsScore,contract:bd.contract||'?',pending:false});return;
+          }
+          const ap=approvals2[bkey];
+          if(ap&&typeof ap.nsScore==='number'){
+            results.push({table:t,round:r,nsScore:ap.nsScore,contract:ap.contract||'?',pending:true});
+          }
+        }
+      });
+      if(!results.length)return;
+      html+='<div style="margin-top:6px;margin-bottom:2px;font-size:0.65rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;">Board '+boardNo+' — Other tables ('+results.length+')</div>';
+      results.forEach(function(o){
+        const sc=o.nsScore>0?'var(--green)':o.nsScore<0?'var(--red)':'var(--gold)';
+        html+='<div style="display:flex;justify-content:space-between;align-items:center;background:var(--surface2);border-radius:6px;padding:5px 10px;margin-bottom:3px;font-size:0.77rem;">'
+          +'<span style="color:var(--text3);white-space:nowrap;">T'+o.table+' R'+o.round+'</span>'
+          +'<span style="font-family:\'Share Tech Mono\',monospace;flex:1;text-align:center;padding:0 6px;">'+(o.contract!=='?'?o.contract:'—')+(o.pending?' ⏳':'')+'</span>'
+          +'<span style="font-weight:700;color:'+sc+';white-space:nowrap;">'+(o.nsScore>0?'+':'')+o.nsScore+'</span>'
+          +'</div>';
+      });
+    });
+    if(!html)return '';
+    return '<div class="card" style="margin-top:10px;"><div class="card-title"><span>📊</span> Same board — other results</div>'+html+'</div>';
+  }
+
+  document.getElementById('panelContent').querySelector('#boardsSection')?.insertAdjacentHTML('beforeend',buildDetailOtherHTML());
+
   // Auto-poll for approvals
   if(bmPollInterval)clearInterval(bmPollInterval);
   bmPollInterval=setInterval(()=>bmPollApprovals(tableNo),1500);
@@ -1262,10 +1304,11 @@ function renderApprovalWaiting(boardNo,boardData,key){
     let h='<div style="margin-top:10px;"><div style="font-size:0.68rem;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:6px;">Same board — Other tables ('+others.length+')</div>';
     others.forEach(function(o){
       const sc=o.nsScore>0?'var(--green)':o.nsScore<0?'var(--red)':'var(--gold)';
+      const contractStr=o.contract&&o.contract!=='?'?o.contract:'—';
       h+='<div style="display:flex;justify-content:space-between;align-items:center;background:var(--surface2);border-radius:6px;padding:6px 10px;margin-bottom:4px;font-size:0.78rem;">'
-        +'<span style="color:var(--text3);">T'+o.table+' R'+o.round+'</span>'
-        +'<span style="font-family:\'Share Tech Mono\',monospace;">'+o.contract+(o.pending?' ⏳':'')+'</span>'
-        +'<span style="font-weight:700;color:'+sc+';">'+(o.nsScore>0?'+':'')+o.nsScore+'</span>'
+        +'<span style="color:var(--text3);white-space:nowrap;">T'+o.table+' R'+o.round+'</span>'
+        +'<span style="font-family:\'Share Tech Mono\',monospace;flex:1;text-align:center;padding:0 6px;">'+contractStr+(o.pending?' ⏳':'')+'</span>'
+        +'<span style="font-weight:700;color:'+sc+';white-space:nowrap;">'+(o.nsScore>0?'+':'')+o.nsScore+'</span>'
         +'</div>';
     });
     return h+'</div>';
