@@ -1705,6 +1705,7 @@ function renderAdminTab(){
   const c=document.getElementById('adminContent');if(!c)return;
   const m={setup:renderSetup,players:renderPlayersAdmin,movement:renderMovement,tables:renderTables,boards:renderBoards,history:renderHistory,log:renderLog,security:renderSecurity};
   c.innerHTML=(m[adminTab]||renderSetup)();
+  if(adminTab==='setup') setTimeout(adminUpdateCalc, 0);
 }
 
 // ── Setup ──
@@ -1745,10 +1746,11 @@ function renderSetup(){
     </div>
     <div class="field">
       <label>Movement</label>
-      <select id="aMovement">
-        <option value="mitchell" ${s.movement==='mitchell'?'selected':''}>Mitchell (NS fixed, EW moves)</option>
-        <option value="howell" ${s.movement==='howell'?'selected':''}>Howell (all pairs move)</option>
+      <select id="aMovement" onchange="adminUpdateCalc()">
+        <option value="mitchell" ${s.movement==='mitchell'?'selected':''}>Mitchell — NS sabit, EW hareket eder</option>
+        <option value="howell" ${s.movement==='howell'?'selected':''}>Howell — tüm çiftler hareket eder</option>
       </select>
+      <div style="font-size:0.72rem;color:var(--text3);margin-top:3px;" id="movHint">Mitchell: çift sayısı masa sayısının 2 katı. Howell: herkes herkesle oynar.</div>
     </div>
     <button class="btn btn-gold btn-full" onclick="adminSetup()" style="margin-bottom:6px;">🚀 Create Tournament</button>
   </div>
@@ -1811,11 +1813,11 @@ window.adminUpdateCalc=function(){
   const bpr=parseInt(document.getElementById('aBPR')?.value||3);
   const tables=Math.floor(players/4);
   const hasPhantom=players%4!==0;
-  const rounds=tables||8;
+  const rounds=bpr>0?Math.floor(totalB/bpr):0;
   const hint=document.getElementById('calcHint');
   const bprHint=document.getElementById('bprHint');
-  if(hint)hint.textContent=`→ ${tables} tables${hasPhantom?' + phantom pair':''}`;
-  if(bprHint)bprHint.textContent=`→ ${bpr} boards/round × ${rounds} rounds = ${bpr*rounds} total slots`;
+  if(hint)hint.textContent=`→ ${tables} table${tables!==1?'s':''}${hasPhantom?' + phantom pair':''}`;
+  if(bprHint)bprHint.textContent=`→ ${bpr} boards/round × ${rounds} rounds = ${bpr*rounds} total boards`;
 };
 
 window.adminSetup=function(){
