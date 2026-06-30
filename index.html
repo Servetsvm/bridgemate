@@ -2183,19 +2183,7 @@ function renderPlayersAdmin(){
 }
 
 // ── Player Registry (shared Firebase, persists across tournaments) ──
-function renderPlayerRegistryModal(){
-  const all=PlayerDB.getAll();
-  const searchVal=(window._regSearch||'').toLowerCase();
-  const filtered=searchVal?all.filter(n=>n.toLowerCase().includes(searchVal)):all;
-  return`<div>
-    <div style="display:flex;gap:6px;margin-bottom:10px;">
-      <input id="regSearchInp" value="${window._regSearch||''}" placeholder="Search players..." oninput="window._regSearch=this.value;document.getElementById('regList').innerHTML=renderRegistryList()"
-        style="flex:1;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.82rem;outline:none;">
-      <button class="btn btn-green btn-sm" onclick="openAddPlayerToRegistry()">+ New</button>
-    </div>
-    <div id="regList">${renderRegistryList()}</div>
-  </div>`;
-}
+
 function renderRegistryList(){
   const all=PlayerDB.getAll();
   const sv=(window._regSearch||'').toLowerCase();
@@ -2208,8 +2196,72 @@ function renderRegistryList(){
 }
 window.openPlayerRegistry=function(){
   window._regSearch='';
-  openModal('👤 Player Registry',renderPlayerRegistryModal(),`<button class="btn btn-ghost" onclick="closeModal()">Close</button>`);
+  window._regTab='list';
+  openModal('👤 Player Registry',`<div id="regModalBody">${renderPlayerRegistryModal()}</div>`,`<button class="btn btn-ghost" onclick="closeModal()">Close</button>`);
 };
+function renderPlayerRegistryModal(){
+  const tab=window._regTab||'list';
+  return`<div>
+    <div style="display:flex;gap:4px;margin-bottom:12px;">
+      <button class="sb-tab ${tab==='list'?'active':''}" onclick="window._regTab='list';document.getElementById('regModalBody').innerHTML=renderPlayerRegistryModal()">📋 Players</button>
+      <button class="sb-tab ${tab==='history'?'active':''}" onclick="window._regTab='history';document.getElementById('regModalBody').innerHTML=renderPlayerRegistryModal()">📊 History</button>
+    </div>
+    ${tab==='list'?renderRegistryListTab():renderRegistryHistoryTab()}
+  </div>`;
+}
+function renderRegistryListTab(){
+  return`<div>
+    <div style="display:flex;gap:6px;margin-bottom:10px;">
+      <input id="regSearchInp" value="${window._regSearch||''}" placeholder="Search players..."
+        oninput="window._regSearch=this.value;document.getElementById('regList').innerHTML=renderRegistryList()"
+        style="flex:1;padding:7px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.82rem;outline:none;">
+      <button class="btn btn-green btn-sm" onclick="openAddPlayerToRegistry()">+ New</button>
+    </div>
+    <div id="regList">${renderRegistryList()}</div>
+  </div>`;
+}
+function renderRegistryHistoryTab(){
+  const archives=getArchives();
+  if(!archives.length)return`<div style="text-align:center;padding:20px;color:var(--text3);">No archived tournaments yet.</div>`;
+  // Build per-player stats from all archives
+  const stats={};
+  archives.forEach(a=>{
+    const mpData=calcMPFromData(a.boards||{},a.movements||{});
+    const pairs=a.pairs||{};
+    Object.values(pairs).filter(p=>!p.isPhantom&&p.name).forEach(p=>{
+      const names=p.name.split('/').map(n=>n.trim()).filter(Boolean);
+      names.forEach(name=>{
+        if(!name||name.length<2)return;
+        if(!stats[name])stats[name]={name,tournaments:0,totalPct:0,best:0,worst:100};
+        const mp=mpData[p.id]||{mp:0,top:0};
+        const pct=mp.top>0?parseFloat((mp.mp/mp.top*100).toFixed(1)):50;
+        stats[name].tournaments++;
+        stats[name].totalPct+=pct;
+        if(pct>stats[name].best)stats[name].best=pct;
+        if(pct<stats[name].worst)stats[name].worst=pct;
+      });
+    });
+  });
+  const rows=Object.values(stats).sort((a,b)=>(b.totalPct/b.tournaments)-(a.totalPct/a.tournaments));
+  if(!rows.length)return`<div style="text-align:center;padding:20px;color:var(--text3);">No player data found in archives.</div>`;
+  return`<div style="overflow-x:auto;">
+    <table class="mv-table">
+      <thead><tr><th>#</th><th>Player</th><th>Played</th><th>Avg%</th><th>Best%</th><th>Worst%</th></tr></thead>
+      <tbody>${rows.map((r,i)=>{
+        const avg=(r.totalPct/r.tournaments).toFixed(1);
+        const col=avg>=60?'var(--green)':avg>=45?'var(--gold)':'var(--red)';
+        return`<tr>
+          <td style="color:var(--text3);">${i+1}</td>
+          <td style="font-weight:600;">${r.name}</td>
+          <td style="color:var(--text3);">${r.tournaments}</td>
+          <td style="font-weight:700;color:${col};">${avg}%</td>
+          <td style="color:var(--green);">${r.best.toFixed(1)}%</td>
+          <td style="color:var(--red);">${r.worst.toFixed(1)}%</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>
+  </div>`;
+}
 window.openAddPlayerToRegistry=function(){
   openModal('Add Player',`
     <div class="field"><label>Full Name</label><input id="newRegName" placeholder="First Last" autofocus style="width:100%;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font-size:0.85rem;outline:none;box-sizing:border-box;"></div>`,
@@ -2237,28 +2289,33 @@ window.deleteFromRegistry=function(name,idx){
 
 // ── Pair name input with player search dropdown ──
 let _searchTarget={pairId:null,slot:null,inp:null};
+let _hideDropTimer=null;
 window.showPlayerSearch=function(inp,pairId,slot){
   _searchTarget={pairId,slot,inp};
   const drop=document.getElementById('playerSearchDrop');
   if(!drop)return;
+  if(_hideDropTimer){clearTimeout(_hideDropTimer);_hideDropTimer=null;}
   const rect=inp.getBoundingClientRect();
   drop.style.left=rect.left+'px';
   drop.style.top=(rect.bottom+4)+'px';
-  drop.style.width=rect.width+'px';
+  drop.style.width=Math.max(rect.width,200)+'px';
   updatePlayerSearchDrop(inp.value);
   drop.style.display='block';
-  inp.addEventListener('input',()=>updatePlayerSearchDrop(inp.value),{once:false});
-  document.addEventListener('click',hidePlayerSearch,{once:true});
+  inp.oninput=()=>updatePlayerSearchDrop(inp.value);
+  inp.onblur=()=>{ _hideDropTimer=setTimeout(hidePlayerSearch,200); };
 };
 function updatePlayerSearchDrop(val){
   const drop=document.getElementById('playerSearchDrop');if(!drop)return;
   const all=PlayerDB.getAll();
-  const sv=val.toLowerCase();
-  const filtered=sv?all.filter(n=>n.toLowerCase().includes(sv)):all.slice(0,20);
+  const sv=(val||'').toLowerCase();
+  const filtered=sv?all.filter(n=>n.toLowerCase().includes(sv)):all.slice(0,25);
   if(!filtered.length){drop.style.display='none';return;}
-  drop.innerHTML=filtered.map(n=>`<div onclick="selectPlayerFromDrop('${n.replace(/'/g,"\\'")}','${_searchTarget.pairId}',${_searchTarget.slot})"
-    style="padding:7px 12px;cursor:pointer;font-size:0.83rem;border-bottom:1px solid var(--border);"
-    onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">${n}</div>`).join('');
+  drop.innerHTML=filtered.map(n=>{
+    const safe=n.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+    return`<div onmousedown="event.preventDefault();selectPlayerFromDrop('${safe}','${_searchTarget.pairId}',${_searchTarget.slot})"
+      style="padding:8px 12px;cursor:pointer;font-size:0.83rem;border-bottom:1px solid var(--border);"
+      onmouseover="this.style.background='var(--surface2)'" onmouseout="this.style.background=''">${n}</div>`;
+  }).join('');
   drop.style.display='block';
 }
 window.selectPlayerFromDrop=function(name,pairId,slot){
@@ -2269,6 +2326,7 @@ window.selectPlayerFromDrop=function(name,pairId,slot){
 function hidePlayerSearch(){
   const drop=document.getElementById('playerSearchDrop');
   if(drop)drop.style.display='none';
+  _hideDropTimer=null;
 }
 
 window.clearAllPairNames=function(){
