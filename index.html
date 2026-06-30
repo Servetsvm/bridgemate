@@ -402,7 +402,7 @@ const getApprovals=()=>_cache['approvals']||{};
 const setApprovals=a=>DB.set('approvals',a);
 
 async function preloadCache(){
-  const keys=['state','pairs','boards','movements','logs','archives','approvals','tableLocks'];
+  const keys=['state','pairs','boards','movements','logs','archives','approvals','tableLocks','playerdb'];
   await Promise.all(keys.map(k=>DB.get(k)));
 }
 
@@ -690,6 +690,7 @@ window.doLogin=async function(){
     if(role==='table'&&bmTableNo) bmPollApprovals(bmTableNo);
   });
   DB.subscribe('tableLocks',()=>{ _cache['tableLocks']=null; DB.get('tableLocks'); });
+  DB.subscribe('playerdb',()=>{}); // keeps _cache fresh for autocomplete
 };
 window.sessionContinue=function(){renderAdminPanel();};
 window.sessionNew=function(){
@@ -2000,16 +2001,20 @@ window.adminReset=async function(){
   toast('🗑 Reset complete');refreshTopbar();renderAdminTab();
 };
 
-// ── Player Database (local memory for name suggestions) ──
+// ── Player Database (shared via Firebase — all devices see same name pool) ──
 const PlayerDB = {
-  getAll(){ try{ return JSON.parse(localStorage.getItem('bm_playerdb')||'[]'); }catch{return[];} },
+  getAll(){ return _cache['playerdb'] || []; },
   save(names){
-    const db = this.getAll();
-    names.forEach(n=>{ n=n.trim(); if(n&&!db.includes(n))db.unshift(n); });
-    if(db.length>200)db.splice(200);
-    localStorage.setItem('bm_playerdb', JSON.stringify(db));
+    const db = this.getAll().slice();
+    let changed = false;
+    names.forEach(n=>{
+      n = (n||'').trim();
+      if(n && !db.includes(n)){ db.unshift(n); changed = true; }
+    });
+    if(db.length>300) db.splice(300);
+    if(changed){ _cache['playerdb'] = db; DB.set('playerdb', db); }
   },
-  clear(){ localStorage.removeItem('bm_playerdb'); }
+  clear(){ _cache['playerdb'] = []; DB.set('playerdb', []); }
 };
 
 // Save names from pairs to PlayerDB
