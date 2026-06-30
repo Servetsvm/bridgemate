@@ -344,6 +344,47 @@ body{font-family:'DM Sans',sans-serif;background:var(--bg);color:var(--text);min
   </div>
 </div>
 
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-app.js";
+  import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.13.1/firebase-auth.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyCOIyA0Jnb9gCNY03wpsy5sqzUkA8V0nRU",
+    authDomain: "bridgemate-77c72.firebaseapp.com",
+    databaseURL: "https://bridgemate-77c72-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "bridgemate-77c72",
+    storageBucket: "bridgemate-77c72.firebasestorage.app",
+    messagingSenderId: "29870713949",
+    appId: "1:29870713949:web:da0f1881a7035d3ef2f1b4",
+    measurementId: "G-QY3TRTE3EH"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const auth = getAuth(app);
+
+  window._authReady = new Promise((resolve) => {
+    onAuthStateChanged(auth, (user) => {
+      if (user) {
+        window._authToken = null; // refreshed lazily below
+        user.getIdToken().then(t => { window._authToken = t; resolve(t); });
+      }
+    });
+  });
+
+  window._getAuthToken = async function(){
+    if (!auth.currentUser) {
+      await signInAnonymously(auth).catch(e => console.warn('Auth sign-in failed', e));
+    }
+    if (auth.currentUser) {
+      const t = await auth.currentUser.getIdToken();
+      window._authToken = t;
+      return t;
+    }
+    return null;
+  };
+
+  signInAnonymously(auth).catch(e => console.warn('Initial anon sign-in failed', e));
+</script>
 <script>
 // ══════════════════════════════════════════════════════
 //  THEME
@@ -357,27 +398,31 @@ window.toggleTheme=function(){const h=document.documentElement;const n=h.getAttr
 // ── Firebase REST DB ──
 const FBURL='https://bridgemate-77c72-default-rtdb.europe-west1.firebasedatabase.app/bm';
 const _cache={};
+async function fbUrl(path){
+  const token = window._authToken || await window._getAuthToken();
+  return FBURL+path+(token?('?auth='+token):'');
+}
 const DB={
   async get(k){
-    try{const r=await fetch(FBURL+'/'+k+'.json',{cache:'no-store'});
+    try{const url=await fbUrl('/'+k+'.json');const r=await fetch(url,{cache:'no-store'});
       if(!r.ok)return _cache[k]||null;
       const v=await r.json();_cache[k]=v;return v;
     }catch(e){return _cache[k]||null;}
   },
   async set(k,v){
     _cache[k]=v;
-    try{await fetch(FBURL+'/'+k+'.json',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)});}
+    try{const url=await fbUrl('/'+k+'.json');await fetch(url,{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify(v)});}
     catch(e){console.warn('FB write fail',k);}
   },
   async del(k){
     delete _cache[k];
-    try{await fetch(FBURL+'/'+k+'.json',{method:'DELETE'});}
+    try{const url=await fbUrl('/'+k+'.json');await fetch(url,{method:'DELETE'});}
     catch(e){}
   },
   subscribe(k,cb){
     let last=undefined;
     const poll=async()=>{
-      try{const r=await fetch(FBURL+'/'+k+'.json',{cache:'no-store'});
+      try{const url=await fbUrl('/'+k+'.json');const r=await fetch(url,{cache:'no-store'});
         if(r.ok){const v=await r.json();const s=JSON.stringify(v);
           if(s!==last){last=s;_cache[k]=v;cb(v);}
         }
@@ -1229,6 +1274,7 @@ window.bmEnterBoard=function(boardNo){
   const key=bmTableNo+'_'+getState().currentRound+'_'+boardNo;
   const existing=getBoards()[key];
   boardForm={level:null,suit:null,declarer:null,result:0,doubled:'',leadSuit:'',leadRank:'',isPass:false,vuln,boardNo};
+  if(!existing)boardForm._startTime=Date.now();
   renderBoardForm(boardNo,vuln,existing);
 };
 
@@ -1395,6 +1441,9 @@ window.saveBoardAndSendApproval=function(boardNo){
     const lead=boardForm.leadSuit&&boardForm.leadRank?boardForm.leadSuit+boardForm.leadRank:'';
     boardData={contract,level:boardForm.level,suit:boardForm.suit,declarer:boardForm.declarer,result:boardForm.result,doubled:boardForm.doubled,lead,vuln:boardForm.vuln,nsScore,ewScore:-nsScore,adjusted:false};
   }
+  if(boardForm._startTime){
+    boardData.durationSec = Math.round((Date.now()-boardForm._startTime)/1000);
+  }
 
   // Store pending approval
   const aps=getApprovals();
@@ -1533,6 +1582,7 @@ function renderScreenPanel(){
       </div>
       <div id="sbContent">${renderSbTab(allRows)}</div>
     </div>`;
+  startScreenAutoScroll();
   // Auto-refresh every 10s
   setTimeout(()=>{if(role==='screen')renderScreenPanel();},10000);
 }
@@ -1623,7 +1673,7 @@ function renderSbTab(allRows){
   if(screenTab==='tables')return renderTablesTab();
   const data=screenTab==='ns'?allRows.filter(r=>r.dir==='NS'):screenTab==='ew'?allRows.filter(r=>r.dir==='EW'):allRows;
   if(!data.length)return`<div class="empty-state"><div class="empty-icon">♠</div>No scores entered yet</div>`;
-  return`<table class="sb-table">
+  return`<div id="sbScrollWrap" style="max-height:60vh;overflow-y:auto;scroll-behavior:smooth;"><table class="sb-table">
     <thead><tr><th>#</th><th>Pair / Player</th><th>Dir</th><th>MP</th><th>Score %</th><th>Boards</th></tr></thead>
     <tbody>${data.map((r,i)=>{
       const rk=i+1;const rc=rk===1?'r1':rk===2?'r2':rk===3?'r3':'rn';
@@ -1637,7 +1687,22 @@ function renderSbTab(allRows){
         <td style="color:var(--text3);font-size:0.78rem;">${r.boards}</td>
       </tr>`;
     }).join('')}</tbody>
-  </table>`;
+  </table></div>`;
+}
+
+// ── Screen auto-scroll for long leaderboards ──
+let _sbScrollTimer=null, _sbScrollDir=1;
+function startScreenAutoScroll(){
+  if(_sbScrollTimer)clearInterval(_sbScrollTimer);
+  _sbScrollTimer=setInterval(()=>{
+    if(role!=='screen'){clearInterval(_sbScrollTimer);_sbScrollTimer=null;return;}
+    const el=document.getElementById('sbScrollWrap');
+    if(!el||el.scrollHeight<=el.clientHeight+10)return;
+    const max=el.scrollHeight-el.clientHeight;
+    if(el.scrollTop>=max-2)_sbScrollDir=-1;
+    else if(el.scrollTop<=2)_sbScrollDir=1;
+    el.scrollTop += _sbScrollDir*1.2;
+  },50);
 }
 
 function renderTablesTab(){
@@ -1864,6 +1929,11 @@ window.adminForceUnlock=function(tableNo){
 };
 window.adminStart=function(){
   const s=getState();if(s.status!=='setup'){toast('Already started');return;}
+  const pairs=getPairs();
+  const unnamed=Object.values(pairs).filter(p=>!p.isPhantom&&(!p.name||!p.name.trim()||/^(NS|EW|Pair)\s*\d+$/.test(p.name.trim())));
+  if(unnamed.length>0){
+    if(!confirm(`⚠️ ${unnamed.length} çiftin ismi henüz girilmemiş.\n\nYine de Round 1'i başlatmak istiyor musunuz?`))return;
+  }
   s.currentRound=1;s.status='running';setState(s);
   addLog('ok','Round 1 started','Tournament begins');
   toast('▶ Round 1 started!');refreshTopbar();renderAdminTab();
@@ -2388,8 +2458,13 @@ function renderTables(){
     let done=0,total=0;
     for(let b=m.boardStart||1;b<=(m.boardEnd||3);b++){total++;if(boards[t+'_'+s.currentRound+'_'+b]?.status==='done')done++;}
     const st=done===total&&total>0?'st-done':done>0?'st-wait':'st-empty';
+    const pct=total>0?Math.round(done/total*100):0;
+    const barColor=pct>=100?'var(--green)':pct>0?'var(--gold)':'var(--border)';
     html+=`<div class="table-card">
       <div class="table-card-head"><span class="tcnum">Table ${t}</span><span class="tc-status ${st}">${done}/${total}</span></div>
+      <div style="height:5px;background:var(--border);border-radius:3px;overflow:hidden;margin:4px 0 8px;">
+        <div style="height:100%;width:${pct}%;background:${barColor};transition:width 0.3s ease;"></div>
+      </div>
       <div class="tc-pairs">
         <div style="color:var(--blue);">🔵 ${ns.name}${ns.isPhantom?' 👻':''}</div>
         <div style="color:var(--gold);">🟡 ${ew.name}${ew.isPhantom?' 👻':''}</div>
@@ -2484,13 +2559,15 @@ function renderBoards(){
       <button class="btn btn-blue btn-sm" onclick="adminExportBoards()">⬇ Export</button>
     </div>
     <table class="mv-table">
-      <thead><tr><th>Key</th><th>Contract</th><th>Lead</th><th>NS</th><th></th></tr></thead>
+      <thead><tr><th>Key</th><th>Contract</th><th>Lead</th><th>NS</th><th>⏱</th><th></th></tr></thead>
       <tbody>${keys.map(k=>{const d=boards[k];const[t,r,b]=k.split('_');
+        const dur=d.durationSec?(d.durationSec<60?d.durationSec+'s':Math.floor(d.durationSec/60)+'m '+(d.durationSec%60)+'s'):'—';
         return`<tr>
           <td style="color:var(--gold);font-size:0.72rem;">T${t}/R${r}/B${b}</td>
           <td style="font-family:'Share Tech Mono',monospace;">${d.adjusted?'<span class="adj-badge">ADJ</span> ':''}${d.contract||'—'}</td>
           <td style="font-family:'Share Tech Mono',monospace;color:var(--text2);">${d.lead||'—'}</td>
           <td style="color:${typeof d.nsScore==='number'?(d.nsScore>=0?'var(--green)':'var(--red)'):'var(--purple)'};">${typeof d.nsScore==='number'?(d.nsScore>0?'+':'')+d.nsScore:d.nsScore||'—'}</td>
+          <td style="font-size:0.7rem;color:var(--text3);">${dur}</td>
           <td><div style="display:flex;gap:3px;">
             <button class="btn btn-blue btn-sm" onclick="adminEditBoard('${k}',${t})">✏️</button>
             <button class="btn btn-red btn-sm" onclick="if(confirm('Delete?')){adminDelBoard('${k}');renderAdminTab();}">🗑</button>
